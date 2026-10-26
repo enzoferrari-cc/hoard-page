@@ -111,7 +111,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.3</div>
+  <div class="ver">v0.0.4</div>
   <script>
     (function () {
       var TABS = [
@@ -262,14 +262,49 @@
         return node;
       }
 
-      function smooth(points, x, y) {
-        if (points.length < 2) return "";
-        var d = "M" + x(0).toFixed(1) + " " + y(points[0]).toFixed(1);
-        for (var i = 0; i < points.length - 1; i += 1) {
-          var x0 = x(i);
-          var x1 = x(i + 1);
-          var mid = (x0 + x1) / 2;
-          d += " C" + mid.toFixed(1) + " " + y(points[i]).toFixed(1) + " " + mid.toFixed(1) + " " + y(points[i + 1]).toFixed(1) + " " + x1.toFixed(1) + " " + y(points[i + 1]).toFixed(1);
+      function monotone(values, xAt, yAt) {
+        var n = values.length;
+        if (n < 2) return "";
+        var xs = [];
+        var ys = [];
+        for (var i = 0; i < n; i += 1) {
+          xs.push(xAt(i));
+          ys.push(yAt(values[i]));
+        }
+        var dx = [];
+        var slope = [];
+        for (var s = 0; s < n - 1; s += 1) {
+          dx.push(xs[s + 1] - xs[s] || 1);
+          slope.push((ys[s + 1] - ys[s]) / dx[s]);
+        }
+        var tan = new Array(n);
+        tan[0] = slope[0];
+        tan[n - 1] = slope[n - 2];
+        for (var j = 1; j < n - 1; j += 1) {
+          tan[j] = slope[j - 1] * slope[j] <= 0 ? 0 : (slope[j - 1] + slope[j]) / 2;
+        }
+        for (var k = 0; k < n - 1; k += 1) {
+          if (slope[k] === 0) {
+            tan[k] = 0;
+            tan[k + 1] = 0;
+            continue;
+          }
+          var a = tan[k] / slope[k];
+          var b = tan[k + 1] / slope[k];
+          var h = a * a + b * b;
+          if (h > 9) {
+            var scale = 3 / Math.sqrt(h);
+            tan[k] = scale * a * slope[k];
+            tan[k + 1] = scale * b * slope[k];
+          }
+        }
+        var d = "M" + xs[0].toFixed(1) + " " + ys[0].toFixed(1);
+        for (var p = 0; p < n - 1; p += 1) {
+          var c1x = xs[p] + dx[p] / 3;
+          var c1y = ys[p] + tan[p] * dx[p] / 3;
+          var c2x = xs[p + 1] - dx[p] / 3;
+          var c2y = ys[p + 1] - tan[p + 1] * dx[p] / 3;
+          d += " C" + c1x.toFixed(1) + " " + c1y.toFixed(1) + " " + c2x.toFixed(1) + " " + c2y.toFixed(1) + " " + xs[p + 1].toFixed(1) + " " + ys[p + 1].toFixed(1);
         }
         return d;
       }
@@ -292,7 +327,7 @@
           if (segment.length < 2) { segment = []; return; }
           var indexes = segment.map(function (item) { return item.i; });
           var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-          path.setAttribute("d", smooth(indexes.map(function (i) { return points[i].total; }), function (n) { return x(indexes[n]); }, y));
+          path.setAttribute("d", monotone(indexes.map(function (i) { return points[i].total; }), function (n) { return x(indexes[n]); }, y));
           path.setAttribute("fill", "none");
           path.setAttribute("stroke", "#8b7cff");
           path.setAttribute("stroke-width", "2");
@@ -413,10 +448,9 @@
       }
 
       try { state.data = decodePortfolio(); } catch (error) { state.data = null; }
-      if (state.data) {
-        var best = TABS.map(function (tab) { return { id: tab.id, n: rowsFor(tab.id, latestSnap()).length }; }).sort(function (a, b) { return b.n - a.n; })[0];
-        if (best && best.n) state.tab = best.id;
-      }
+      var requested = (new URLSearchParams(location.search).get("tab") || "").toLowerCase();
+      var tabFromUrl = { cny: "CNY", hkd: "HKD", usd: "USD" }[requested];
+      state.tab = tabFromUrl || "CNY";
       render();
     })();
   </script>
