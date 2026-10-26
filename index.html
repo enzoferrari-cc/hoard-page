@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Hoard</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231c1915'/%3E%3C/svg%3E">
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: #f3efe6; color: #1c1915; }
+    body {
+      min-height: 100vh;
+      font-family: "Iowan Old Style", Palatino, Georgia, serif;
+    }
+    main {
+      width: min(560px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 18vh 0 64px;
+    }
+    .ver {
+      position: fixed;
+      top: 18px;
+      right: 20px;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      color: #6f675c;
+    }
+    .empty {
+      font-size: clamp(3rem, 10vw, 4.5rem);
+      line-height: 1;
+      color: #6f675c;
+    }
+    .ccy { border-top: 1px solid #e3dacc; padding: 22px 0 8px; }
+    .line { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+    .sym { font-size: 1rem; color: #6f675c; }
+    .num { font-size: clamp(2.6rem, 8vw, 4rem); line-height: 0.95; letter-spacing: -0.03em; }
+    .neg { color: #8d4034; }
+    svg { display: block; width: 100%; height: 42px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="ver">v0.0.1</div>
+  <main id="app"></main>
+  <script>
+    (function () {
+      var ORDER = ["USD", "USDT", "USDC", "HKD", "CNY"];
+      var SYMBOL = { USD: "$", USDT: "₮", USDC: "₮", HKD: "HK$", CNY: "¥" };
+
+      function decodePortfolio() {
+        var raw = new URLSearchParams(location.search).get("portfolio");
+        if (!raw) return null;
+        raw = raw.replace(/-/g, "+").replace(/_/g, "/");
+        while (raw.length % 4) raw += "=";
+        var bytes = Uint8Array.from(atob(raw), function (ch) { return ch.charCodeAt(0); });
+        return JSON.parse(new TextDecoder().decode(bytes));
+      }
+
+      function currencyOf(row, quote) {
+        if (row.ccy) return String(row.ccy).toUpperCase();
+        if (quote && quote.ccy) return String(quote.ccy).toUpperCase();
+        var source = typeof row.price === "string" ? row.price : "";
+        if (source.indexOf("tencent:") === 0) return source.slice(8, 10).toLowerCase() === "hk" ? "HKD" : "CNY";
+        if (source.indexOf("yahoo:") === 0) return source.toUpperCase().slice(-3) === ".HK" ? "HKD" : "USD";
+        if (source.indexOf("okx:") === 0 && source.indexOf("-") > 0) return source.split("-").pop().toUpperCase();
+        if (source.indexOf("fixed:") === 0) return (source.split(":")[2] || "USD").toUpperCase();
+        return null;
+      }
+
+      function quoteFor(row, snap) {
+        if (typeof row.price === "number") return { price: row.price, ccy: currencyOf(row) };
+        var book = (snap && snap.prices) || {};
+        var found = book[row.symbol] || book[row.id];
+        if (typeof found === "number") return { price: found, ccy: currencyOf(row) };
+        if (found && typeof found.price === "number") return found;
+        return null;
+      }
+
+      function groups(data, snap) {
+        var out = {};
+        (data.holdings || []).forEach(function (row) {
+          if (row.qty == null || row.count === "exposure") return;
+          var quote = quoteFor(row, snap);
+          var ccy = currencyOf(row, quote);
+          if (!quote || !ccy) return;
+          out[ccy] = (out[ccy] || 0) + Number(row.qty) * quote.price;
+        });
+        return out;
+      }
+
+      function ordered(keys) {
+        return keys.sort(function (a, b) {
+          var ia = ORDER.indexOf(a);
+          var ib = ORDER.indexOf(b);
+          if (ia < 0) ia = 99;
+          if (ib < 0) ib = 99;
+          return ia - ib || a.localeCompare(b);
+        });
+      }
+
+      function format(value) {
+        var abs = Math.abs(value);
+        var digits = abs >= 100 || abs === 0 ? 0 : 2;
+        var body = new Intl.NumberFormat("en-US", { maximumFractionDigits: digits, minimumFractionDigits: digits }).format(abs);
+        return value < 0 ? "−" + body : body;
+      }
+
+      function spark(series) {
+        if (series.length < 2) return null;
+        var min = Math.min.apply(null, series);
+        var max = Math.max.apply(null, series);
+        if (min === max) { min -= 1; max += 1; }
+        var d = series.map(function (value, i) {
+          var x = series.length === 1 ? 50 : (i / (series.length - 1)) * 100;
+          var y = 4 + (1 - (value - min) / (max - min)) * 34;
+          return (i ? "L" : "M") + x.toFixed(2) + " " + y.toFixed(2);
+        }).join(" ");
+        var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("viewBox", "0 0 100 42");
+        svg.setAttribute("preserveAspectRatio", "none");
+        svg.setAttribute("aria-hidden", "true");
+        var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", d);
+        path.setAttribute("fill", "none");
+        path.setAttribute("stroke", "#1c1915");
+        path.setAttribute("stroke-width", "1.5");
+        path.setAttribute("vector-effect", "non-scaling-stroke");
+        svg.appendChild(path);
+        return svg;
+      }
+
+      var app = document.getElementById("app");
+      var data = null;
+      try { data = decodePortfolio(); } catch (error) { data = null; }
+      if (!data || !(data.holdings || []).length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "—";
+        app.appendChild(empty);
+        return;
+      }
+      var snaps = data.snapshots || [];
+      var latest = snaps.length ? snaps[snaps.length - 1] : null;
+      var totals = groups(data, latest);
+      ordered(Object.keys(totals)).forEach(function (ccy) {
+        var block = document.createElement("section");
+        block.className = "ccy";
+        var line = document.createElement("div");
+        line.className = "line";
+        var sym = document.createElement("span");
+        sym.className = "sym";
+        sym.textContent = SYMBOL[ccy] || ccy;
+        var num = document.createElement("span");
+        num.className = "num" + (totals[ccy] < 0 ? " neg" : "");
+        num.textContent = format(totals[ccy]);
+        line.appendChild(sym);
+        line.appendChild(num);
+        block.appendChild(line);
+        var series = snaps.map(function (snap) { return groups(data, snap)[ccy]; }).filter(function (value) { return value != null; });
+        var lineChart = spark(series);
+        if (lineChart) block.appendChild(lineChart);
+        app.appendChild(block);
+      });
+      if (!app.childNodes.length) {
+        var none = document.createElement("p");
+        none.className = "empty";
+        none.textContent = "—";
+        app.appendChild(none);
+      }
+    })();
+  </script>
+</body>
+</html>
