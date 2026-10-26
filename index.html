@@ -86,7 +86,7 @@
       align-items: center;
       justify-content: center;
       color: #8a8f98;
-      font-size: 11px;
+      font-size: 10px;
     }
     .sym { color: #eef0f3; }
     .muted, .empty { color: #8a8f98; }
@@ -111,7 +111,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.4</div>
+  <div class="ver">v0.0.5</div>
   <script>
     (function () {
       var TABS = [
@@ -168,6 +168,15 @@
         if (typeof found === "number") return { price: found, ccy: currencyOf(row) };
         if (found && typeof found.price === "number") return found;
         return null;
+      }
+
+      function markFor(row) {
+        var symbol = String(row.symbol || "");
+        var source = typeof row.price === "string" ? row.price.toLowerCase() : "";
+        var tags = row.tags || [];
+        if (symbol.toUpperCase().slice(-3) === ".HK" || source.indexOf("tencent:hk") === 0 || tags.indexOf("港股") >= 0 || tags.indexOf("港股通") >= 0) return "HK";
+        if (/^\d{6}$/.test(symbol) || source.indexOf("tencent:sh") === 0 || source.indexOf("tencent:sz") === 0 || tags.indexOf("A股") >= 0) return "A";
+        return symbol.slice(0, 1) || "?";
       }
 
       function lineValue(row, snap) {
@@ -434,7 +443,7 @@
         var list = document.createElement("ul");
         rows.slice().sort(function (a, b) { return Math.abs(b.value) - Math.abs(a.value); }).forEach(function (item) {
           var li = document.createElement("li");
-          li.appendChild(el("span", "av", String(item.row.symbol || "?").slice(0, 1)));
+          li.appendChild(el("span", "av", markFor(item.row)));
           li.appendChild(el("span", "sym", item.row.symbol));
           li.appendChild(el("span", "right" + (item.row.qty < 0 ? " neg" : ""), new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(item.row.qty).replace("-", "−")));
           li.appendChild(el("span", "right muted", formatNum(item.price, item.price >= 100 ? 0 : 2)));
