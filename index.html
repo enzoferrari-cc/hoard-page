@@ -5,50 +5,121 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
   <title>Hoard</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231c1915'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230e0f11'/%3E%3Cpath d='M16 7l2.2 6.8H25l-5.6 4.1 2.1 6.6L16 20.6 10.5 24.5l2.1-6.6L7 13.8h6.8z' fill='%238b7cff'/%3E%3C/svg%3E">
   <style>
-    :root { color-scheme: light; }
+    :root { color-scheme: dark; }
     * { box-sizing: border-box; }
-    html, body { margin: 0; background: #f3efe6; color: #1c1915; }
-    body {
-      min-height: 100vh;
-      font-family: "Iowan Old Style", Palatino, Georgia, serif;
+    html, body { margin: 0; background: #0e0f11; color: #eef0f3; }
+    body { min-height: 100vh; font-family: ui-sans-serif, system-ui, sans-serif; }
+    main { width: min(760px, calc(100% - 40px)); margin: 0 auto; padding: 28px 0 72px; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .brand { display: flex; align-items: center; gap: 8px; font-size: 14px; letter-spacing: 0.04em; }
+    .brand svg { display: block; }
+    .tabs { display: flex; gap: 8px; }
+    .tab, .ver {
+      border: 1px solid #2a2d33;
+      background: #16171a;
+      color: #8a8f98;
+      border-radius: 10px;
     }
-    main {
-      width: min(560px, calc(100% - 48px));
-      margin: 0 auto;
-      padding: 18vh 0 64px;
+    .tab {
+      width: 42px;
+      height: 34px;
+      font: 12px/1 ui-sans-serif, system-ui, sans-serif;
+      cursor: pointer;
     }
+    .tab.on { color: #eef0f3; border-color: #8b7cff; box-shadow: inset 0 0 0 1px #8b7cff; }
+    .tab:disabled { opacity: 0.35; cursor: default; }
     .ver {
       position: fixed;
-      top: 18px;
-      right: 20px;
-      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      right: 16px;
+      bottom: 14px;
+      padding: 4px 8px;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+    }
+    .hero { margin-top: 54px; }
+    .total {
+      margin: 0;
+      font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      font-size: clamp(3.2rem, 9vw, 4.8rem);
+      letter-spacing: -0.04em;
+      line-height: 0.95;
+      font-weight: 480;
+    }
+    .moves { display: flex; gap: 18px; margin-top: 14px; color: #8a8f98; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+    .up { color: #8b7cff; }
+    .down { color: #e36b6b; }
+    .chart { margin-top: 28px; }
+    .chart svg, .donut svg { width: 100%; display: block; }
+    .chart svg { height: 180px; }
+    .split { display: grid; grid-template-columns: 168px 1fr; gap: 28px; margin-top: 28px; align-items: start; }
+    .donut { position: relative; width: 168px; height: 168px; }
+    .donut svg { height: 168px; }
+    .count {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 22px;
+      pointer-events: none;
+    }
+    ul { list-style: none; margin: 0; padding: 0; }
+    li {
+      display: grid;
+      grid-template-columns: 28px 1.2fr 1fr 1fr 1.2fr 52px;
+      gap: 10px;
+      align-items: center;
+      padding: 11px 0;
+      border-top: 1px solid #22242a;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 13px;
+    }
+    .av {
+      width: 28px;
+      height: 28px;
+      border: 1px solid #2a2d33;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #8a8f98;
       font-size: 11px;
-      letter-spacing: 0.12em;
-      color: #6f675c;
     }
-    .empty {
-      font-size: clamp(3rem, 10vw, 4.5rem);
-      line-height: 1;
-      color: #6f675c;
+    .sym { color: #eef0f3; }
+    .muted, .empty { color: #8a8f98; }
+    .neg { color: #e36b6b; }
+    .right { text-align: right; }
+    .empty { margin-top: 18vh; font-size: 28px; }
+    @media (max-width: 680px) {
+      .split { grid-template-columns: 1fr; }
+      li { grid-template-columns: 28px 1fr 1fr; }
+      li span:nth-child(n + 5) { display: none; }
     }
-    .ccy { border-top: 1px solid #e3dacc; padding: 22px 0 8px; }
-    .line { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
-    .sym { font-size: 1rem; color: #6f675c; }
-    .num { font-size: clamp(2.6rem, 8vw, 4rem); line-height: 0.95; letter-spacing: -0.03em; }
-    .neg { color: #8d4034; }
-    .ccy > svg { display: block; width: 100%; height: 42px; margin-top: 8px; }
-    .sym svg { width: 16px; height: 16px; display: block; }
   </style>
 </head>
 <body>
-  <div class="ver">v0.0.2</div>
-  <main id="app"></main>
+  <main>
+    <header>
+      <div class="brand">
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.2l1.5 4.6H14.4L10.6 8.7l1.4 4.5L8 10.4 4 13.2l1.4-4.5L1.6 5.8h4.9z" fill="#8b7cff"/></svg>
+        Hoard
+      </div>
+      <div class="tabs" id="tabs"></div>
+    </header>
+    <div id="app"></div>
+  </main>
+  <div class="ver">v0.0.3</div>
   <script>
     (function () {
-      var ORDER = ["USD", "USDT", "USDC", "HKD", "CNY"];
-      var SYMBOL = { USD: "$", USDT: "₮", HKD: "HK$", CNY: "¥" };
+      var TABS = [
+        { id: "CNY", mark: "¥" },
+        { id: "HKD", mark: "HK$" },
+        { id: "USD", mark: "$" }
+      ];
+      var state = { data: null, tab: "USD" };
 
       function decodePortfolio() {
         var raw = new URLSearchParams(location.search).get("portfolio");
@@ -66,7 +137,15 @@
         if (source.indexOf("tencent:") === 0) return source.slice(8, 10).toLowerCase() === "hk" ? "HKD" : "CNY";
         if (source.indexOf("yahoo:") === 0) return source.toUpperCase().slice(-3) === ".HK" ? "HKD" : "USD";
         if (source.indexOf("okx:") === 0 && source.indexOf("-") > 0) return source.split("-").pop().toUpperCase();
-        if (source.indexOf("fixed:") === 0) return (source.split(":")[2] || "USD").toUpperCase();
+        if (source.indexOf("fixed:") === 0) return (source.split(":")[2] || row.symbol || "USD").toUpperCase();
+        return null;
+      }
+
+      function anchorOf(ccy) {
+        if (!ccy) return null;
+        ccy = ccy.toUpperCase();
+        if (ccy === "USD" || ccy === "USDT" || ccy === "USDC") return "USD";
+        if (ccy === "HKD" || ccy === "CNY") return ccy;
         return null;
       }
 
@@ -76,7 +155,7 @@
         var price = Number(parts[1]);
         if (!isFinite(price)) return null;
         var ccy = row.ccy || parts[2];
-        if (!ccy && (row.symbol === "USDC" || row.symbol === "USDT")) ccy = row.symbol;
+        if (!ccy && (row.symbol === "USDC" || row.symbol === "USDT" || row.symbol === "USD")) ccy = row.symbol === "USD" ? "USD" : row.symbol;
         return { price: price, ccy: String(ccy || "USD").toUpperCase() };
       }
 
@@ -91,112 +170,254 @@
         return null;
       }
 
-      function groups(data, snap) {
-        var out = {};
-        (data.holdings || []).forEach(function (row) {
-          if (row.qty == null || row.count === "exposure") return;
-          var quote = quoteFor(row, snap);
-          var ccy = currencyOf(row, quote);
-          if (!quote || !ccy) return;
-          out[ccy] = (out[ccy] || 0) + Number(row.qty) * quote.price;
-        });
-        return out;
+      function lineValue(row, snap) {
+        if (row.qty == null || row.count === "exposure") return null;
+        var quote = quoteFor(row, snap);
+        var anchor = anchorOf(currencyOf(row, quote));
+        if (!quote || !anchor) return null;
+        return { anchor: anchor, price: quote.price, value: Number(row.qty) * quote.price };
       }
 
-      function ordered(keys) {
-        return keys.sort(function (a, b) {
-          var ia = ORDER.indexOf(a);
-          var ib = ORDER.indexOf(b);
-          if (ia < 0) ia = 99;
-          if (ib < 0) ib = 99;
-          return ia - ib || a.localeCompare(b);
-        });
+      function rowsFor(tab, snap) {
+        return (state.data.holdings || []).map(function (row) {
+          var valued = lineValue(row, snap);
+          if (!valued || valued.anchor !== tab) return null;
+          return { row: row, price: valued.price, value: valued.value };
+        }).filter(Boolean);
       }
 
-      function format(value) {
+      function shanghaiDate(iso) {
+        return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Hong_Kong", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+      }
+
+      function dateUtc(iso) {
+        var parts = shanghaiDate(iso).split("-").map(Number);
+        return Date.UTC(parts[0], parts[1] - 1, parts[2]);
+      }
+
+      function windowStart(latest, kind) {
+        var parts = shanghaiDate(latest).split("-").map(Number);
+        var utc = Date.UTC(parts[0], parts[1] - 1, parts[2]);
+        if (kind === "week") {
+          var day = new Date(utc).getUTCDay();
+          return utc - (day === 0 ? 6 : day - 1) * 86400000;
+        }
+        return Date.UTC(parts[0], parts[1] - 1, 1);
+      }
+
+      function series(tab) {
+        var expected = (state.data.holdings || []).filter(function (row) {
+          if (row.qty == null || row.count === "exposure") return false;
+          return anchorOf(currencyOf(row, quoteFor(row, null))) === tab;
+        });
+        return (state.data.snapshots || []).map(function (snap) {
+          if (!expected.length) return null;
+          var valued = expected.map(function (row) { return lineValue(row, snap); });
+          return {
+            ts: snap.ts,
+            total: valued.reduce(function (sum, item) { return sum + (item ? item.value : 0); }, 0),
+            complete: valued.every(Boolean),
+            backfill: snap.source === "backfill"
+          };
+        }).filter(Boolean);
+      }
+
+      function change(points, kind) {
+        var complete = points.filter(function (point) { return point.complete; });
+        if (complete.length < 2) return null;
+        var latest = complete[complete.length - 1];
+        var start = windowStart(latest.ts, kind);
+        var baseline = null;
+        complete.forEach(function (point) {
+          if (point === latest) return;
+          if (dateUtc(point.ts) <= start) baseline = point;
+        });
+        if (!baseline) {
+          complete.some(function (point) {
+            if (point === latest) return false;
+            baseline = point;
+            return true;
+          });
+        }
+        if (!baseline || !baseline.total) return null;
+        return (latest.total - baseline.total) / baseline.total;
+      }
+
+      function formatNum(value, digits) {
         var abs = Math.abs(value);
-        var digits = abs >= 100 || abs === 0 ? 0 : 2;
-        var body = new Intl.NumberFormat("en-US", { maximumFractionDigits: digits, minimumFractionDigits: digits }).format(abs);
+        var body = new Intl.NumberFormat("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(abs);
         return value < 0 ? "−" + body : body;
       }
 
-      function spark(series) {
-        if (series.length < 2) return null;
-        var min = Math.min.apply(null, series);
-        var max = Math.max.apply(null, series);
-        if (min === max) { min -= 1; max += 1; }
-        var d = series.map(function (value, i) {
-          var x = series.length === 1 ? 50 : (i / (series.length - 1)) * 100;
-          var y = 4 + (1 - (value - min) / (max - min)) * 34;
-          return (i ? "L" : "M") + x.toFixed(2) + " " + y.toFixed(2);
-        }).join(" ");
+      function formatPct(value) {
+        if (value == null || !isFinite(value)) return "—";
+        var arrow = value > 0 ? "↑ " : value < 0 ? "↓ " : "";
+        return arrow + Math.abs(value * 100).toFixed(1) + "%";
+      }
+
+      function el(tag, className, text) {
+        var node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text != null) node.textContent = text;
+        return node;
+      }
+
+      function smooth(points, x, y) {
+        if (points.length < 2) return "";
+        var d = "M" + x(0).toFixed(1) + " " + y(points[0]).toFixed(1);
+        for (var i = 0; i < points.length - 1; i += 1) {
+          var x0 = x(i);
+          var x1 = x(i + 1);
+          var mid = (x0 + x1) / 2;
+          d += " C" + mid.toFixed(1) + " " + y(points[i]).toFixed(1) + " " + mid.toFixed(1) + " " + y(points[i + 1]).toFixed(1) + " " + x1.toFixed(1) + " " + y(points[i + 1]).toFixed(1);
+        }
+        return d;
+      }
+
+      function drawChart(points) {
         var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        svg.setAttribute("viewBox", "0 0 100 42");
-        svg.setAttribute("preserveAspectRatio", "none");
-        svg.setAttribute("aria-hidden", "true");
-        var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        path.setAttribute("d", d);
-        path.setAttribute("fill", "none");
-        path.setAttribute("stroke", "#1c1915");
-        path.setAttribute("stroke-width", "1.5");
-        path.setAttribute("vector-effect", "non-scaling-stroke");
-        svg.appendChild(path);
+        svg.setAttribute("viewBox", "0 0 760 180");
+        svg.setAttribute("role", "img");
+        if (points.length < 2) return svg;
+        var min = Math.min.apply(null, points.map(function (point) { return point.total; }));
+        var max = Math.max.apply(null, points.map(function (point) { return point.total; }));
+        if (min === max) { min -= 1; max += 1; }
+        var pad = (max - min) * 0.16;
+        min -= pad;
+        max += pad;
+        function x(i) { return 8 + (i / (points.length - 1)) * 744; }
+        function y(value) { return 12 + (1 - (value - min) / (max - min)) * 150; }
+        var segment = [];
+        function flush() {
+          if (segment.length < 2) { segment = []; return; }
+          var indexes = segment.map(function (item) { return item.i; });
+          var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          path.setAttribute("d", smooth(indexes.map(function (i) { return points[i].total; }), function (n) { return x(indexes[n]); }, y));
+          path.setAttribute("fill", "none");
+          path.setAttribute("stroke", "#8b7cff");
+          path.setAttribute("stroke-width", "2");
+          if (segment[0].backfill) path.setAttribute("stroke-dasharray", "5 4");
+          svg.appendChild(path);
+          segment = [];
+        }
+        points.forEach(function (point, i) {
+          if (!point.complete) { flush(); return; }
+          if (segment.length && segment[0].backfill !== point.backfill) {
+            var previous = segment[segment.length - 1];
+            flush();
+            segment = [previous, { i: i, backfill: point.backfill }];
+            return;
+          }
+          segment.push({ i: i, backfill: point.backfill });
+        });
+        flush();
         return svg;
       }
 
-      var app = document.getElementById("app");
-      var data = null;
-      try { data = decodePortfolio(); } catch (error) { data = null; }
-      if (!data || !(data.holdings || []).length) {
-        var empty = document.createElement("p");
-        empty.className = "empty";
-        empty.textContent = "—";
-        app.appendChild(empty);
-        return;
+      function drawDonut(rows) {
+        var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("viewBox", "0 0 168 168");
+        var positives = rows.filter(function (item) { return item.value > 0; });
+        var sum = positives.reduce(function (total, item) { return total + item.value; }, 0);
+        var start = -Math.PI / 2;
+        positives.forEach(function (item, index) {
+          var angle = sum ? (item.value / sum) * Math.PI * 2 : 0;
+          var end = start + angle;
+          var large = angle > Math.PI ? 1 : 0;
+          var r = 62;
+          var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          var x1 = 84 + r * Math.cos(start);
+          var y1 = 84 + r * Math.sin(start);
+          var x2 = 84 + r * Math.cos(end - 0.01);
+          var y2 = 84 + r * Math.sin(end - 0.01);
+          path.setAttribute("d", "M" + x1.toFixed(2) + " " + y1.toFixed(2) + " A" + r + " " + r + " 0 " + large + " 1 " + x2.toFixed(2) + " " + y2.toFixed(2));
+          path.setAttribute("fill", "none");
+          path.setAttribute("stroke", "#8b7cff");
+          path.setAttribute("stroke-opacity", String(1 - (index % 4) * 0.22));
+          path.setAttribute("stroke-width", "14");
+          path.setAttribute("stroke-linecap", "butt");
+          svg.appendChild(path);
+          start = end;
+        });
+        return svg;
       }
-      var snaps = data.snapshots || [];
-      var latest = snaps.length ? snaps[snaps.length - 1] : null;
-      var totals = groups(data, latest);
-      ordered(Object.keys(totals)).forEach(function (ccy) {
-        var block = document.createElement("section");
-        block.className = "ccy";
-        var line = document.createElement("div");
-        line.className = "line";
-        var sym = document.createElement("span");
-        sym.className = "sym";
-        if (ccy === "USDC") {
-          var mark = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-          mark.setAttribute("viewBox", "0 0 16 16");
-          mark.setAttribute("aria-label", "USDC");
-          var circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-          circle.setAttribute("cx", "8");
-          circle.setAttribute("cy", "8");
-          circle.setAttribute("r", "6.5");
-          circle.setAttribute("fill", "none");
-          circle.setAttribute("stroke", "#1c1915");
-          circle.setAttribute("stroke-width", "1.4");
-          mark.appendChild(circle);
-          sym.appendChild(mark);
-        } else {
-          sym.textContent = SYMBOL[ccy] || ccy;
+
+      function renderTabs() {
+        var host = document.getElementById("tabs");
+        host.textContent = "";
+        TABS.forEach(function (tab) {
+          var button = el("button", "tab" + (state.tab === tab.id ? " on" : ""), tab.mark);
+          button.type = "button";
+          button.disabled = rowsFor(tab.id, latestSnap()).length === 0;
+          button.addEventListener("click", function () {
+            state.tab = tab.id;
+            render();
+          });
+          host.appendChild(button);
+        });
+      }
+
+      function latestSnap() {
+        var snaps = (state.data && state.data.snapshots) || [];
+        return snaps.length ? snaps[snaps.length - 1] : null;
+      }
+
+      function render() {
+        var app = document.getElementById("app");
+        app.textContent = "";
+        renderTabs();
+        if (!state.data) {
+          app.appendChild(el("p", "empty", "—"));
+          return;
         }
-        var num = document.createElement("span");
-        num.className = "num" + (totals[ccy] < 0 ? " neg" : "");
-        num.textContent = format(totals[ccy]);
-        line.appendChild(sym);
-        line.appendChild(num);
-        block.appendChild(line);
-        var series = snaps.map(function (snap) { return groups(data, snap)[ccy]; }).filter(function (value) { return value != null; });
-        var lineChart = spark(series);
-        if (lineChart) block.appendChild(lineChart);
-        app.appendChild(block);
-      });
-      if (!app.childNodes.length) {
-        var none = document.createElement("p");
-        none.className = "empty";
-        none.textContent = "—";
-        app.appendChild(none);
+        var latest = latestSnap();
+        var rows = rowsFor(state.tab, latest);
+        if (!rows.length) {
+          app.appendChild(el("p", "empty", "—"));
+          return;
+        }
+        var total = rows.reduce(function (sum, item) { return sum + item.value; }, 0);
+        var points = series(state.tab);
+        var hero = el("section", "hero");
+        var figure = el("p", "total" + (total < 0 ? " neg" : ""), formatNum(total, Math.abs(total) >= 100 || total === 0 ? 0 : 2));
+        hero.appendChild(figure);
+        var moves = el("div", "moves");
+        [["W", change(points, "week")], ["M", change(points, "month")]].forEach(function (item) {
+          var node = el("span", item[1] > 0 ? "up" : item[1] < 0 ? "down" : "", item[0] + " " + formatPct(item[1]));
+          moves.appendChild(node);
+        });
+        hero.appendChild(moves);
+        app.appendChild(hero);
+        var chart = el("section", "chart");
+        chart.appendChild(drawChart(points));
+        app.appendChild(chart);
+        var split = el("section", "split");
+        var donut = el("div", "donut");
+        donut.appendChild(drawDonut(rows));
+        donut.appendChild(el("div", "count", String(rows.length)));
+        split.appendChild(donut);
+        var list = document.createElement("ul");
+        rows.slice().sort(function (a, b) { return Math.abs(b.value) - Math.abs(a.value); }).forEach(function (item) {
+          var li = document.createElement("li");
+          li.appendChild(el("span", "av", String(item.row.symbol || "?").slice(0, 1)));
+          li.appendChild(el("span", "sym", item.row.symbol));
+          li.appendChild(el("span", "right" + (item.row.qty < 0 ? " neg" : ""), new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(item.row.qty).replace("-", "−")));
+          li.appendChild(el("span", "right muted", formatNum(item.price, item.price >= 100 ? 0 : 2)));
+          li.appendChild(el("span", "right" + (item.value < 0 ? " neg" : ""), formatNum(item.value, Math.abs(item.value) >= 100 ? 0 : 2)));
+          var share = total ? item.value / total : null;
+          li.appendChild(el("span", "right muted", share == null ? "—" : (share * 100).toFixed(0) + "%"));
+          list.appendChild(li);
+        });
+        split.appendChild(list);
+        app.appendChild(split);
       }
+
+      try { state.data = decodePortfolio(); } catch (error) { state.data = null; }
+      if (state.data) {
+        var best = TABS.map(function (tab) { return { id: tab.id, n: rowsFor(tab.id, latestSnap()).length }; }).sort(function (a, b) { return b.n - a.n; })[0];
+        if (best && best.n) state.tab = best.id;
+      }
+      render();
     })();
   </script>
 </body>
