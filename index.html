@@ -38,21 +38,22 @@
     .sym { font-size: 1rem; color: #6f675c; }
     .num { font-size: clamp(2.6rem, 8vw, 4rem); line-height: 0.95; letter-spacing: -0.03em; }
     .neg { color: #8d4034; }
-    svg { display: block; width: 100%; height: 42px; margin-top: 8px; }
+    .ccy > svg { display: block; width: 100%; height: 42px; margin-top: 8px; }
+    .sym svg { width: 16px; height: 16px; display: block; }
   </style>
 </head>
 <body>
-  <div class="ver">v0.0.1</div>
+  <div class="ver">v0.0.2</div>
   <main id="app"></main>
   <script>
     (function () {
       var ORDER = ["USD", "USDT", "USDC", "HKD", "CNY"];
-      var SYMBOL = { USD: "$", USDT: "₮", USDC: "₮", HKD: "HK$", CNY: "¥" };
+      var SYMBOL = { USD: "$", USDT: "₮", HKD: "HK$", CNY: "¥" };
 
       function decodePortfolio() {
         var raw = new URLSearchParams(location.search).get("portfolio");
         if (!raw) return null;
-        raw = raw.replace(/-/g, "+").replace(/_/g, "/");
+        raw = raw.replace(/ /g, "+").replace(/-/g, "+").replace(/_/g, "/");
         while (raw.length % 4) raw += "=";
         var bytes = Uint8Array.from(atob(raw), function (ch) { return ch.charCodeAt(0); });
         return JSON.parse(new TextDecoder().decode(bytes));
@@ -69,7 +70,19 @@
         return null;
       }
 
+      function fixedQuote(row) {
+        if (typeof row.price !== "string" || row.price.indexOf("fixed:") !== 0) return null;
+        var parts = row.price.split(":");
+        var price = Number(parts[1]);
+        if (!isFinite(price)) return null;
+        var ccy = row.ccy || parts[2];
+        if (!ccy && (row.symbol === "USDC" || row.symbol === "USDT")) ccy = row.symbol;
+        return { price: price, ccy: String(ccy || "USD").toUpperCase() };
+      }
+
       function quoteFor(row, snap) {
+        var fixed = fixedQuote(row);
+        if (fixed) return fixed;
         if (typeof row.price === "number") return { price: row.price, ccy: currencyOf(row) };
         var book = (snap && snap.prices) || {};
         var found = book[row.symbol] || book[row.id];
@@ -151,7 +164,22 @@
         line.className = "line";
         var sym = document.createElement("span");
         sym.className = "sym";
-        sym.textContent = SYMBOL[ccy] || ccy;
+        if (ccy === "USDC") {
+          var mark = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+          mark.setAttribute("viewBox", "0 0 16 16");
+          mark.setAttribute("aria-label", "USDC");
+          var circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          circle.setAttribute("cx", "8");
+          circle.setAttribute("cy", "8");
+          circle.setAttribute("r", "6.5");
+          circle.setAttribute("fill", "none");
+          circle.setAttribute("stroke", "#1c1915");
+          circle.setAttribute("stroke-width", "1.4");
+          mark.appendChild(circle);
+          sym.appendChild(mark);
+        } else {
+          sym.textContent = SYMBOL[ccy] || ccy;
+        }
         var num = document.createElement("span");
         num.className = "num" + (totals[ccy] < 0 ? " neg" : "");
         num.textContent = format(totals[ccy]);
