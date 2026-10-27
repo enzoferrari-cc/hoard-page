@@ -179,7 +179,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.43</div>
+  <div class="ver">v0.0.44</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -210,7 +210,9 @@
         { id: "HKD", mark: "HK$" },
         { id: "USD", mark: "$" }
       ];
-      var state = { data: null, tab: "CNY", tags: [], open: {}, focus: null, metric: "price", range: "1y", sort: "value", dir: -1 };
+      var state = { data: null, notice: "", tab: "CNY", tags: [], open: {}, focus: null, metric: "price", range: "1y", sort: "value", dir: -1 };
+      // Publishable client settings only. Never put a secret key here.
+      var remoteConfig = window.HOARD_SUPABASE || null;
       var chart = null;
       var RANGES = ["7d", "30d", "3m", "6m", "1y"];
       function palette(index) {
@@ -924,7 +926,7 @@
         app.textContent = "";
         document.getElementById("tabs").textContent = "";
         if (!state.data) {
-          app.appendChild(el("p", "empty", "—"));
+          app.appendChild(el("p", "empty", state.notice || "—"));
           return;
         }
         var latest = latestSnap();
@@ -1222,13 +1224,61 @@
         app.appendChild(table);
       }
 
-      try { state.data = decodePortfolio(); } catch (error) { state.data = null; }
       var requested = (hashParams().get("tab") || "").toLowerCase();
       var tabFromUrl = { cny: "CNY", hkd: "HKD", usd: "USD" }[requested];
       state.tab = tabFromUrl || "CNY";
       var asset = hashParams().get("asset");
       if (asset) state.focus = asset;
-      render();
+      if (remoteConfig && remoteConfig.url && remoteConfig.publishableKey) loadRemote();
+      else {
+        try { state.data = decodePortfolio(); } catch (error) { state.data = null; }
+        render();
+      }
+
+      function loadRemote() {
+        var script = document.createElement("script");
+        script.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.js";
+        script.onload = function () {
+          var client = window.supabase.createClient(remoteConfig.url, remoteConfig.publishableKey);
+          client.auth.getSession().then(function (result) {
+            var session = result.data && result.data.session;
+            if (!session) {
+              state.notice = "请登录后查看";
+              render();
+              return;
+            }
+            var headers = { apikey: remoteConfig.publishableKey, Authorization: "Bearer " + session.access_token };
+            var root = remoteConfig.url.replace(/\/$/, "");
+            var holdingsPath = remoteConfig.holdingsPath || "/rest/v1/holdings?select=*";
+            var snapshotsPath = remoteConfig.snapshotsPath || "/rest/v1/snapshots?select=*&order=ts.asc";
+            Promise.all([
+              fetch(root + holdingsPath, { headers: headers }),
+              fetch(root + snapshotsPath, { headers: headers })
+            ]).then(function (responses) {
+              if (responses.some(function (res) { return !res.ok; })) throw new Error("read");
+              return Promise.all(responses.map(function (res) { return res.json(); }));
+            }).then(function (parts) {
+              state.data = { holdings: parts[0] || [], snapshots: parts[1] || [] };
+              state.notice = "";
+              render();
+            }).catch(function () {
+              state.data = null;
+              state.notice = "读取失败";
+              render();
+            });
+          }).catch(function () {
+            state.data = null;
+            state.notice = "读取失败";
+            render();
+          });
+        };
+        script.onerror = function () {
+          state.data = null;
+          state.notice = "读取失败";
+          render();
+        };
+        document.head.appendChild(script);
+      }
     })();
   </script>
 </body>
