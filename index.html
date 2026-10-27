@@ -105,7 +105,8 @@
     .head button.left { text-align: left; }
     .head button.on { color: #eef0f3; }
     table.sheet { font-size: 13px; font-variant-numeric: tabular-nums; }
-    .logo { width: 22px; height: 22px; }
+    .logo { width: 22px; height: 22px; flex: 0 0 22px; }
+    .logo.blank { visibility: hidden; }
     .logo img, .logo svg { width: 22px; height: 22px; display: block; }
     .name { display: flex; align-items: center; gap: 8px; }
     .name button.expander {
@@ -179,7 +180,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.51</div>
+  <div class="ver">v0.0.52</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -312,21 +313,34 @@
       }
 
       // Icons are the full spothq/cryptocurrency-icons set, CC0-1.0, loaded by symbol.
+      // Tickers with no icon keep an empty 22px slot so a failed request never
+      // reflows the row (removing the node made the page jump on first paint).
+      var NO_ICON = {
+        bil: 1, bnd: 1, shy: 1, tlt: 1, ief: 1, lqd: 1, agg: 1, spy: 1, qqq: 1,
+        voo: 1, vti: 1, aapl: 1, msft: 1, nvda: 1, tsla: 1, goog: 1, amzn: 1, meta: 1
+      };
+
       function logoFor(row) {
         var ticker = baseTicker(row.symbol).toLowerCase();
         var wrap = document.createElement("span");
         wrap.className = "logo";
-        if (!/^[a-z][a-z0-9]{1,9}$/.test(ticker)) return wrap;
+        if (!/^[a-z][a-z0-9]{1,9}$/.test(ticker)) {
+          wrap.className = "logo blank";
+          return wrap;
+        }
         var img = document.createElement("img");
         img.alt = "";
+        img.loading = "lazy";
+        img.decoding = "async";
+        if (NO_ICON[ticker]) {
+          wrap.className = "logo blank";
+          return wrap;
+        }
         img.src = "icons/" + ticker + ".svg";
         img.addEventListener("error", function () {
-          if (img.dataset.fallback) {
-            wrap.remove();
-            return;
-          }
-          img.dataset.fallback = "1";
-          img.src = "icons/" + ticker + ".png";
+          // Keep the slot, just hide it. No second request, no layout shift.
+          wrap.className = "logo blank";
+          img.removeAttribute("src");
         });
         wrap.appendChild(img);
         return wrap;
@@ -854,8 +868,7 @@
         }
         var name = el("span", "name");
         if (!item) {
-          var logo = logoFor(group.items[0].row);
-          if (logo.querySelector("img")) name.appendChild(logo);
+          name.appendChild(logoFor(group.items[0].row));
           var text = el("span", "name-text");
           if (group.items.length > 1) {
             var line = el("span", "sym");
