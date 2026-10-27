@@ -205,7 +205,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.62</div>
+  <div class="ver">v0.0.63</div>
   <div class="stale" id="stale" hidden>
     有新版本 <button type="button" id="reload">刷新</button>
   </div>
@@ -475,11 +475,29 @@
         return row.type === "perp";
       }
 
+      // A perp leg carries no price source, so fall back to the currency the
+      // catalog records for that row before giving up on it.
+      function rowCurrency(row) {
+        var ccy = currencyOf(row, quoteFor(row, null));
+        if (ccy) return ccy;
+        var known = catalogTable()[row.id];
+        return known && known.ccy ? String(known.ccy).toUpperCase() : null;
+      }
+
       function rowsFor(tab, snap) {
         return (state.data.holdings || []).map(function (row) {
-          if (isFutures(row)) return null;
           var valued = lineValue(row, snap);
-          if (!valued || valued.anchor !== tab || !rowMatch(row)) return null;
+          if (!valued) {
+            // lineValue has no quote for a perp, so value it at its own upl.
+            if (row.type === "perp") {
+              var upl = row.upl;
+              if (upl == null || !isFinite(Number(upl)) || rowMatch(row) === false) return null;
+              if (anchorOf(rowCurrency(row)) !== tab) return null;
+              return { row: row, ticker: baseTicker(row.symbol), price: null, value: Number(upl) };
+            }
+            return null;
+          }
+          if (valued.anchor !== tab || !rowMatch(row)) return null;
           return { row: row, ticker: baseTicker(row.symbol), price: valued.price, value: valued.value };
         }).filter(Boolean);
       }
@@ -543,7 +561,7 @@
         var ids = [];
         Object.keys(table).forEach(function (id) {
           var row = table[id];
-          if (!row || row.type === "perp") return;
+          if (!row) return;
           if (anchorOf(row.ccy) !== key) return;
           if (!accountMatch(row) || !tagMatch(row)) return;
           ids.push(id);
@@ -1131,6 +1149,13 @@
         var latest = latestSnap();
         var rows = rowsFor(state.tab, latest);
         var total = rows.reduce(function (sum, item) { return sum + (item.value || 0); }, 0);
+        // With no filter the book total is authoritative (it includes unrealised
+        // perp pnl); with a filter, the matched rows are.
+        var filtering = state.accounts.length > 0 || state.tags.length > 0;
+        var bookTotal = latest && latest.balances && latest.balances[state.tab];
+        if (!filtering && bookTotal && isFinite(Number(bookTotal.net))) {
+          total = Number(bookTotal.net);
+        }
         var daily = inRange(state.focus ? symbolCurves(state.focus) : series(state.tab));
         var points = downsample(daily);
         var shown = total;
