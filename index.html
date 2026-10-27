@@ -179,7 +179,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.49</div>
+  <div class="ver">v0.0.50</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -878,8 +878,10 @@
           put(new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(group.qty).replace("-", "−"), "right" + (group.qty < 0 ? " neg" : ""));
           put(group.price == null ? "—" : formatNum(group.price, group.price >= 100 ? 0 : 2), "right muted");
           put(group.value == null ? "—" : formatNum(group.value, Math.abs(group.value) >= 100 ? 0 : 2), "right" + (group.value < 0 ? " neg" : ""));
-          if (group.items.length > 1) put("");
-          else put(tagList(group.items[0].row.tags || []));
+          var shared = (group.items[0].row.tags || []).filter(function (tag) {
+            return group.items.every(function (item) { return (item.row.tags || []).indexOf(tag) >= 0; });
+          });
+          put(tagList(group.items.length > 1 ? shared : (group.items[0].row.tags || [])));
           return row;
         }
         row.className = "child";
