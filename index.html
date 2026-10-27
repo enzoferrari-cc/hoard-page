@@ -179,7 +179,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.36</div>
+  <div class="ver">v0.0.37</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -304,29 +304,6 @@
         return "generic";
       }
 
-      function iconFor(row) {
-        var ticker = baseTicker(row.symbol);
-        var paths = {
-          ETH: '<path d="M16 5l7 11-7 4-7-4z" fill="#8b7cff"/><path d="M16 27l7-11-7 4-7-4z" fill="#5b4ed1"/>',
-          BTC: '<circle cx="16" cy="16" r="11" fill="#f0b429"/><path d="M14 9h4.5a2.4 2.4 0 010 4.8H14V9zm0 6.2h5.2a2.4 2.4 0 010 4.8H14v-4.8z" fill="#1c1915"/>',
-          USDC: '<circle cx="16" cy="16" r="11" fill="#5aa9ff"/><circle cx="16" cy="16" r="5" fill="#0e0f11"/>',
-          USDT: '<circle cx="16" cy="16" r="11" fill="#3ecfb2"/><path d="M10 13h12M16 10v12" stroke="#0e0f11" stroke-width="2"/>',
-          "0700.HK": '<rect x="6" y="6" width="20" height="20" rx="6" fill="#ff7a90"/><circle cx="16" cy="16" r="5" fill="#0e0f11"/>',
-          "9988.HK": '<rect x="6" y="6" width="20" height="20" rx="6" fill="#f08a5d"/><path d="M11 21l5-10 5 10" fill="none" stroke="#0e0f11" stroke-width="2"/>',
-          "510300": '<rect x="6" y="6" width="20" height="20" rx="6" fill="#5aa9ff"/><path d="M10 20l4-8 3 5 5-7" fill="none" stroke="#0e0f11" stroke-width="2"/>',
-          "513050": '<rect x="6" y="6" width="20" height="20" rx="6" fill="#c084fc"/><circle cx="16" cy="16" r="4" fill="#0e0f11"/>',
-          "518880": '<rect x="6" y="6" width="20" height="20" rx="6" fill="#f0b429"/><circle cx="16" cy="16" r="4" fill="#0e0f11"/>'
-        };
-        var wrap = document.createElement("span");
-        wrap.className = "av";
-        if (paths[ticker]) {
-          wrap.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true">' + paths[ticker] + "</svg>";
-          return wrap;
-        }
-        wrap.textContent = markFor(row);
-        return wrap;
-      }
-
       // Crypto icons from spothq/cryptocurrency-icons, CC0-1.0. Stocks have no icon.
       function logoFor(row) {
         var ticker = baseTicker(row.symbol).toUpperCase();
@@ -341,15 +318,6 @@
         var svg = logos[baseTicker(row.symbol).toUpperCase()];
         if (svg) wrap.innerHTML = svg;
         return wrap;
-      }
-
-      function markFor(row) {
-        var symbol = String(row.symbol || "");
-        var source = typeof row.price === "string" ? row.price.toLowerCase() : "";
-        var tags = row.tags || [];
-        if (symbol.toUpperCase().slice(-3) === ".HK" || source.indexOf("tencent:hk") === 0 || tags.indexOf("港股") >= 0 || tags.indexOf("港股通") >= 0) return "HK";
-        if (/^\d{6}$/.test(symbol) || source.indexOf("tencent:sh") === 0 || source.indexOf("tencent:sz") === 0 || tags.indexOf("A股") >= 0) return "A";
-        return symbol.slice(0, 1) || "?";
       }
 
       function lineValue(row, snap) {
