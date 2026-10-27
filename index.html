@@ -47,6 +47,15 @@
       line-height: 0.95;
       font-weight: 480;
     }
+    .ccy-switch {
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+      padding: 0;
+    }
+    .active { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
     .moves { display: flex; gap: 18px; margin-top: 14px; color: #8a8f98; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
     .up { color: #8b7cff; }
     .down { color: #e36b6b; }
@@ -70,7 +79,7 @@
     .sheet { width: 100%; }
     .head, li {
       display: grid;
-      grid-template-columns: 14px 22px 1.4fr 0.8fr 0.8fr 1fr 52px 1.3fr;
+      grid-template-columns: 22px 1.4fr 0.8fr 0.8fr 1fr 1.3fr;
       gap: 10px;
       align-items: center;
     }
@@ -116,10 +125,12 @@
     .tags { display: flex; gap: 4px; flex-wrap: nowrap; justify-content: flex-end; }
     .tag {
       border: 1px solid #2a2d33;
+      background: transparent;
       border-radius: 999px;
       padding: 2px 6px;
       color: #8a8f98;
       font: 10px/1.4 ui-sans-serif, system-ui, sans-serif;
+      cursor: pointer;
     }
     .muted, .empty { color: #8a8f98; }
     .neg { color: #e36b6b; }
@@ -127,7 +138,7 @@
     .empty { margin-top: 18vh; font-size: 28px; }
     @media (max-width: 680px) {
       .split { grid-template-columns: 1fr; }
-      .head, li { grid-template-columns: 14px 22px 1fr 1fr; }
+      .head, li { grid-template-columns: 22px 1fr 1fr; }
       .head button:nth-child(n + 4), li span:nth-child(n + 5) { display: none; }
     }
   </style>
@@ -143,7 +154,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.12</div>
+  <div class="ver">v0.0.13</div>
   <script>
     (function () {
       var TABS = [
@@ -562,26 +573,28 @@
       function render() {
         var app = document.getElementById("app");
         app.textContent = "";
-        renderFilters();
+        document.getElementById("tabs").textContent = "";
         if (!state.data) {
           app.appendChild(el("p", "empty", "—"));
           return;
         }
         var latest = latestSnap();
         var rows = rowsFor(state.tab, latest);
-        var tickers = [];
-        rows.forEach(function (item) {
-          if (tickers.indexOf(item.ticker) < 0) tickers.push(item.ticker);
-          item.color = palette(tickers.indexOf(item.ticker));
-        });
-        if (!rows.length) {
-          app.appendChild(el("p", "empty", "—"));
-          return;
-        }
         var total = rows.reduce(function (sum, item) { return sum + item.value; }, 0);
         var points = series(state.tab);
         var hero = el("section", "hero");
-        var figure = el("p", "total" + (total < 0 ? " neg" : ""), formatNum(total, Math.abs(total) >= 100 || total === 0 ? 0 : 2) + " " + state.tab);
+        var figure = el("p", "total" + (total < 0 ? " neg" : ""));
+        figure.appendChild(document.createTextNode((rows.length ? formatNum(total, Math.abs(total) >= 100 || total === 0 ? 0 : 2) : "—") + " "));
+        var switcher = el("button", "ccy-switch", state.tab);
+        switcher.type = "button";
+        switcher.addEventListener("click", function () {
+          var order = ["CNY", "HKD", "USD"];
+          state.tab = order[(order.indexOf(state.tab) + 1) % order.length];
+          var known = availableTags();
+          state.tags = state.tags.filter(function (tag) { return known.indexOf(tag) >= 0; });
+          render();
+        });
+        figure.appendChild(switcher);
         hero.appendChild(figure);
         var moves = el("div", "moves");
         [["W", change(points, "week")], ["M", change(points, "month")]].forEach(function (item) {
@@ -589,21 +602,30 @@
           moves.appendChild(node);
         });
         hero.appendChild(moves);
+        if (state.tags.length) {
+          var active = el("div", "active");
+          state.tags.forEach(function (tag) {
+            var chosen = el("button", "chip on", tag + " ×");
+            chosen.type = "button";
+            chosen.style.background = tagColor(tag);
+            chosen.style.borderColor = tagColor(tag);
+            chosen.style.color = "#0e0f11";
+            chosen.addEventListener("click", function () {
+              state.tags = state.tags.filter(function (item) { return item !== tag; });
+              render();
+            });
+            active.appendChild(chosen);
+          });
+          hero.appendChild(active);
+        }
         app.appendChild(hero);
         var chart = el("section", "chart");
         chart.appendChild(drawChart(points));
         app.appendChild(chart);
-        var split = el("section", "split");
-        var donut = el("div", "donut");
-        donut.appendChild(drawDonut(rows));
-        var tickerCount = rows.reduce(function (list, item) { if (list.indexOf(item.ticker) < 0) list.push(item.ticker); return list; }, []).length;
-        donut.appendChild(el("div", "count", String(tickerCount)));
-        split.appendChild(donut);
         var sheet = el("div", "sheet");
         var head = el("div", "head");
         head.appendChild(el("span", ""));
-        head.appendChild(el("span", ""));
-        [["name", "Asset", "left"], ["qty", "Qty", ""], ["price", "Price", ""], ["value", "Value", ""], ["share", "%", ""], ["tag", "Tags", ""]].forEach(function (col) {
+        [["name", "Asset", "left"], ["qty", "Qty", ""], ["price", "Price", ""], ["value", "Value", ""], ["tag", "Tags", ""]].forEach(function (col) {
           var button = el("button", (col[2] ? col[2] + " " : "") + (state.sort === col[0] ? "on" : ""), col[1] + (state.sort === col[0] ? (state.dir < 0 ? " ↓" : " ↑") : ""));
           button.type = "button";
           button.addEventListener("click", function () {
@@ -614,6 +636,7 @@
           head.appendChild(button);
         });
         sheet.appendChild(head);
+        app.appendChild(sheet);
         var list = document.createElement("ul");
         rows.slice().sort(function (a, b) {
           var av = sortValue(a, total);
@@ -622,9 +645,6 @@
           return (av - bv) * state.dir;
         }).forEach(function (item) {
           var li = document.createElement("li");
-          var dot = el("span", "dot");
-          dot.style.background = item.color;
-          li.appendChild(dot);
           li.appendChild(logoFor(item.row));
           var name = el("span", "name");
           var ticker = baseTicker(item.row.symbol);
@@ -635,21 +655,28 @@
           li.appendChild(el("span", "right" + (item.row.qty < 0 ? " neg" : ""), new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(item.row.qty).replace("-", "−")));
           li.appendChild(el("span", "right muted", formatNum(item.price, item.price >= 100 ? 0 : 2)));
           li.appendChild(el("span", "right" + (item.value < 0 ? " neg" : ""), formatNum(item.value, Math.abs(item.value) >= 100 ? 0 : 2)));
-          var share = total ? item.value / total : null;
-          li.appendChild(el("span", "right muted", share == null ? "—" : (share * 100).toFixed(0) + "%"));
           var tags = el("span", "tags");
           (item.row.tags || []).forEach(function (tag) {
-            var chip = el("span", "tag", tag);
+            var chip = el("button", "tag", tag);
+            chip.type = "button";
             chip.style.borderColor = tagColor(tag);
             chip.style.color = tagColor(tag);
+            if (state.tags.indexOf(tag) >= 0) {
+              chip.style.background = tagColor(tag);
+              chip.style.color = "#0e0f11";
+            }
+            chip.addEventListener("click", function () {
+              var at = state.tags.indexOf(tag);
+              if (at >= 0) state.tags.splice(at, 1);
+              else state.tags.push(tag);
+              render();
+            });
             tags.appendChild(chip);
           });
           li.appendChild(tags);
           list.appendChild(li);
         });
         sheet.appendChild(list);
-        split.appendChild(sheet);
-        app.appendChild(split);
       }
 
       try { state.data = decodePortfolio(); } catch (error) { state.data = null; }
