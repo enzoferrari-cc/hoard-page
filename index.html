@@ -179,7 +179,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.30</div>
+  <div class="ver">v0.0.31</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -996,6 +996,94 @@
           }
         });
         sheet.appendChild(list);
+        renderFutures(app);
+      }
+
+      function renderFutures(app) {
+        var positions = (state.data && state.data.positions) || [];
+        if (!positions.length) return;
+        var title = el("div", "ranges", "Futures");
+        title.style.marginTop = "28px";
+        app.appendChild(title);
+        var table = document.createElement("table");
+        table.className = "sheet";
+        var cols = document.createElement("colgroup");
+        ["22%", "16%", "16%", "16%", "16%", "14%"].forEach(function (width) {
+          var col = document.createElement("col");
+          col.style.width = width;
+          cols.appendChild(col);
+        });
+        table.appendChild(cols);
+        var head = document.createElement("tr");
+        head.className = "head";
+        ["Asset", "Qty", "Entry", "Mark", "uPnL", "Margin"].forEach(function (label, index) {
+          var cell = document.createElement("th");
+          cell.appendChild(el("button", index ? "" : "left", label));
+          head.appendChild(cell);
+        });
+        var thead = document.createElement("thead");
+        thead.appendChild(head);
+        table.appendChild(thead);
+        var body = document.createElement("tbody");
+        var groups = {};
+        var order = [];
+        positions.forEach(function (row) {
+          var key = row.symbol || row.inst;
+          if (!groups[key]) {
+            groups[key] = [];
+            order.push(key);
+          }
+          groups[key].push(row);
+        });
+        function cellText(text, className) {
+          var cell = document.createElement("td");
+          if (className) cell.className = className;
+          cell.textContent = text;
+          return cell;
+        }
+        function addRow(parent, legs) {
+          var tr = document.createElement("tr");
+          if (!parent) tr.className = "child";
+          var net = legs.reduce(function (sum, row) { return sum + Number(row.qty || 0); }, 0);
+          var upl = legs.reduce(function (sum, row) { return sum + Number(row.upl || 0); }, 0);
+          var name = el("span", "name-text");
+          if (parent && legs.length > 1) {
+            var line = el("span", "sym");
+            var toggle = el("button", "expander", state.open["fut:" + legs[0].symbol] ? "▾" : "▸");
+            toggle.type = "button";
+            toggle.addEventListener("click", function () {
+              state.open["fut:" + legs[0].symbol] = !state.open["fut:" + legs[0].symbol];
+              render();
+            });
+            line.appendChild(toggle);
+            line.appendChild(document.createTextNode(" " + legs[0].symbol));
+            name.appendChild(line);
+            name.appendChild(el("span", "code", net < 0 ? "Short" : "Long"));
+          } else {
+            var label = parent ? legs[0].symbol : (legs[0].side === "short" ? "Short" : "Long");
+            name.appendChild(el("span", "sym", label));
+            if (parent) name.appendChild(el("span", "code", net < 0 ? "Short" : "Long"));
+          }
+          var nameCell = document.createElement("td");
+          nameCell.appendChild(name);
+          tr.appendChild(nameCell);
+          tr.appendChild(cellText(formatFlex(parent ? net : Number(legs[0].qty), 4), "right"));
+          var entry = parent && legs.length > 1 ? null : legs[0].entry;
+          var mark = parent && legs.length > 1 ? legs[legs.length - 1].mark : legs[0].mark;
+          var margin = parent && legs.length > 1 ? null : legs[0].margin;
+          tr.appendChild(cellText(entry == null ? "—" : formatNum(entry, entry >= 100 ? 0 : 2), "right muted"));
+          tr.appendChild(cellText(mark == null ? "—" : formatNum(mark, mark >= 100 ? 0 : 2), "right muted"));
+          tr.appendChild(cellText(formatNum(parent ? upl : Number(legs[0].upl), 2), "right" + ((parent ? upl : legs[0].upl) < 0 ? " neg" : "")));
+          tr.appendChild(cellText(margin == null ? "—" : formatNum(margin, 2), "right muted"));
+          body.appendChild(tr);
+        }
+        order.forEach(function (key) {
+          var legs = groups[key];
+          addRow(true, legs);
+          if (legs.length > 1 && state.open["fut:" + key]) legs.forEach(function (leg) { addRow(false, [leg]); });
+        });
+        table.appendChild(body);
+        app.appendChild(table);
       }
 
       try { state.data = decodePortfolio(); } catch (error) { state.data = null; }
