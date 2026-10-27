@@ -179,7 +179,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.47</div>
+  <div class="ver">v0.0.48</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -315,7 +315,14 @@
         var img = document.createElement("img");
         img.alt = "";
         img.src = "icons/" + ticker + ".svg";
-        img.addEventListener("error", function () { wrap.replaceChildren(); });
+        img.addEventListener("error", function () {
+          if (img.dataset.fallback) {
+            wrap.replaceChildren();
+            return;
+          }
+          img.dataset.fallback = "1";
+          img.src = "icons/" + ticker + ".png";
+        });
         wrap.appendChild(img);
         return wrap;
       }
@@ -913,10 +920,8 @@
           put(new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(group.qty).replace("-", "−"), "right" + (group.qty < 0 ? " neg" : ""));
           put(group.price == null ? "—" : formatNum(group.price, group.price >= 100 ? 0 : 2), "right muted");
           put(group.value == null ? "—" : formatNum(group.value, Math.abs(group.value) >= 100 ? 0 : 2), "right" + (group.value < 0 ? " neg" : ""));
-          put(tagList(group.items.reduce(function (all, item) {
-            (item.row.tags || []).forEach(function (tag) { if (all.indexOf(tag) < 0) all.push(tag); });
-            return all;
-          }, [])));
+          if (group.items.length > 1) put("");
+          else put(tagList(group.items[0].row.tags || []));
           return row;
         }
         row.className = "child";
