@@ -64,7 +64,9 @@
     .ccy-switch.on { color: #eef0f3; }
     li.child { padding-left: 28px; }
     .active { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
-    .moves { display: flex; gap: 18px; margin-top: 14px; color: #8a8f98; font-size: 13px; font-variant-numeric: tabular-nums; }
+    .ranges { display: flex; gap: 12px; align-items: center; margin-top: 14px; color: #8a8f98; font-size: 13px; font-variant-numeric: tabular-nums; }
+    .range { border: 0; background: transparent; color: #8a8f98; font: 500 13px/1 Inter, ui-sans-serif, system-ui, sans-serif; padding: 0; cursor: pointer; }
+    .range.on { color: #eef0f3; }
     .up { color: #8b7cff; }
     .down { color: #e36b6b; }
     .chart { margin-top: 28px; }
@@ -164,7 +166,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.19</div>
+  <div class="ver">v0.0.20</div>
   <script>
     (function () {
       var TABS = [
@@ -172,7 +174,8 @@
         { id: "HKD", mark: "HK$" },
         { id: "USD", mark: "$" }
       ];
-      var state = { data: null, tab: "CNY", tags: [], open: {}, sort: "value", dir: -1 };
+      var state = { data: null, tab: "CNY", tags: [], open: {}, range: "1y", sort: "value", dir: -1 };
+      var RANGES = ["7d", "30d", "3m", "6m", "1y"];
       function palette(index) {
         return "hsl(" + Math.round((index * 137.508) % 360) + " 68% 64%)";
       }
@@ -362,25 +365,35 @@
         }).filter(Boolean);
       }
 
-      function change(points, kind) {
-        var complete = points.filter(function (point) { return point.complete; });
-        if (complete.length < 2) return null;
-        var latest = complete[complete.length - 1];
-        var start = windowStart(latest.ts, kind);
-        var baseline = null;
-        complete.forEach(function (point) {
-          if (point === latest) return;
-          if (dateUtc(point.ts) <= start) baseline = point;
+      function rangeStart(latest, range) {
+        var parts = shanghaiDate(latest).split("-").map(Number);
+        var date = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+        if (range === "7d") date.setUTCDate(date.getUTCDate() - 7);
+        else if (range === "30d") date.setUTCDate(date.getUTCDate() - 30);
+        else if (range === "3m") date.setUTCMonth(date.getUTCMonth() - 3);
+        else if (range === "6m") date.setUTCMonth(date.getUTCMonth() - 6);
+        else date.setUTCFullYear(date.getUTCFullYear() - 1);
+        return date.getTime();
+      }
+
+      function inRange(points) {
+        if (!points.length) return [];
+        var start = rangeStart(points[points.length - 1].ts, state.range);
+        var prior = null;
+        var inside = [];
+        points.forEach(function (point) {
+          if (dateUtc(point.ts) < start) prior = point;
+          else inside.push(point);
         });
-        if (!baseline) {
-          complete.some(function (point) {
-            if (point === latest) return false;
-            baseline = point;
-            return true;
-          });
-        }
-        if (!baseline || !baseline.total) return null;
-        return (latest.total - baseline.total) / baseline.total;
+        if (prior) inside.unshift(prior);
+        return inside;
+      }
+
+      function change(points) {
+        var complete = points.filter(function (point) { return point.complete; });
+        if (complete.length < 2 || !complete[0].total) return null;
+        var last = complete[complete.length - 1];
+        return (last.total - complete[0].total) / complete[0].total;
       }
 
       function formatNum(value, digits) {
@@ -650,7 +663,7 @@
         var latest = latestSnap();
         var rows = rowsFor(state.tab, latest);
         var total = rows.reduce(function (sum, item) { return sum + item.value; }, 0);
-        var points = series(state.tab);
+        var points = inRange(series(state.tab));
         var hero = el("section", "hero");
         var line = el("div", "total-line");
         line.appendChild(el("p", "total" + (total < 0 ? " neg" : ""), rows.length ? formatNum(total, Math.abs(total) >= 100 || total === 0 ? 0 : 2) : "—"));
@@ -668,12 +681,19 @@
         });
         line.appendChild(ccys);
         hero.appendChild(line);
-        var moves = el("div", "moves");
-        [["W", change(points, "week")], ["M", change(points, "month")]].forEach(function (item) {
-          var node = el("span", item[1] > 0 ? "up" : item[1] < 0 ? "down" : "", item[0] + " " + formatPct(item[1]));
-          moves.appendChild(node);
+        var ranges = el("div", "ranges");
+        RANGES.forEach(function (id) {
+          var button = el("button", "range" + (state.range === id ? " on" : ""), id);
+          button.type = "button";
+          button.addEventListener("click", function () {
+            state.range = id;
+            render();
+          });
+          ranges.appendChild(button);
         });
-        hero.appendChild(moves);
+        var pct = change(points);
+        ranges.appendChild(el("span", pct > 0 ? "up" : pct < 0 ? "down" : "", formatPct(pct)));
+        hero.appendChild(ranges);
         if (state.tags.length) {
           var active = el("div", "active");
           state.tags.forEach(function (tag) {
