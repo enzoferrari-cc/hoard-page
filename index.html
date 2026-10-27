@@ -166,7 +166,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.21</div>
+  <div class="ver">v0.0.22</div>
   <script>
     (function () {
       var TABS = [
@@ -193,10 +193,12 @@
         node.style.color = "hsl(" + hue + " 16% 74%)";
       }
 
+      function hashParams() {
+        return new URLSearchParams((location.hash || "").replace(/^#/, ""));
+      }
+
       function portfolioRaw() {
-        var hash = new URLSearchParams((location.hash || "").replace(/^#/, "")).get("portfolio");
-        if (hash) return hash;
-        return new URLSearchParams(location.search).get("portfolio");
+        return hashParams().get("portfolio");
       }
 
       function decodePortfolio() {
@@ -764,7 +766,7 @@
       }
 
       try { state.data = decodePortfolio(); } catch (error) { state.data = null; }
-      var requested = (new URLSearchParams(location.search).get("tab") || "").toLowerCase();
+      var requested = (hashParams().get("tab") || "").toLowerCase();
       var tabFromUrl = { cny: "CNY", hkd: "HKD", usd: "USD" }[requested];
       state.tab = tabFromUrl || "CNY";
       render();
