@@ -161,13 +161,13 @@
     <header>
       <div class="brand">
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.2l1.5 4.6H14.4L10.6 8.7l1.4 4.5L8 10.4 4 13.2l1.4-4.5L1.6 5.8h4.9z" fill="#8b7cff"/></svg>
-        Hoard
+        <span id="brand-name">Hoard</span>
       </div>
       <div class="tabs" id="tabs"></div>
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.27</div>
+  <div class="ver">v0.0.28</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -581,7 +581,9 @@
             fill: !!fill,
             tension: 0.35,
             cubicInterpolationMode: "monotone",
-            borderWidth: 1.75,
+            borderWidth: axis === "y" ? 1.75 : 1.15,
+            borderDash: axis === "yQty" ? [4, 3] : undefined,
+            stepped: axis === "yQty" ? "after" : false,
             pointRadius: 0,
             pointHoverRadius: 3,
             pointHoverBackgroundColor: "#eef0f3",
@@ -606,13 +608,16 @@
         var datasets = [series("Value", "value", "#8b7cff", "rgba(139,124,255,0.45)", "y", gradient)];
         var scales = {
           x: { display: false, grid: { display: false } },
-          y: yAxis("right", "#8a8f98", extra ? "Value" : "", true)
+          y: yAxis("right", "#8a8f98", "", true)
         };
         if (extra) {
           datasets.push(series("Price", "price", "#7eb6ff", "rgba(126,182,255,0.45)", "yPrice"));
           datasets.push(series("Qty", "qty", "#e0b07a", "rgba(224,176,122,0.45)", "yQty"));
-          scales.yPrice = yAxis("left", "#7eb6ff", "Price", false);
-          scales.yQty = yAxis("left", "#e0b07a", "Qty", false);
+          scales.yPrice = yAxis("left", "#7eb6ff", "", false);
+          scales.yPrice.ticks.mirror = true;
+          scales.yPrice.ticks.padding = 6;
+          scales.yPrice.afterFit = function (scale) { scale.width = 0; };
+          scales.yQty = { display: false, position: "left", grid: { display: false }, border: { display: false } };
         }
         chart = new Chart(ctx, {
           type: "line",
@@ -819,6 +824,8 @@
 
       function render() {
         var scrollY = window.scrollY;
+        var brand = document.getElementById("brand-name");
+        if (brand) brand.textContent = state.focus || "Hoard";
         if (chart) { chart.destroy(); chart = null; }
         var app = document.getElementById("app");
         app.textContent = "";
