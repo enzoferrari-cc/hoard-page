@@ -166,7 +166,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.20</div>
+  <div class="ver">v0.0.21</div>
   <script>
     (function () {
       var TABS = [
@@ -193,8 +193,14 @@
         node.style.color = "hsl(" + hue + " 16% 74%)";
       }
 
+      function portfolioRaw() {
+        var hash = new URLSearchParams((location.hash || "").replace(/^#/, "")).get("portfolio");
+        if (hash) return hash;
+        return new URLSearchParams(location.search).get("portfolio");
+      }
+
       function decodePortfolio() {
-        var raw = new URLSearchParams(location.search).get("portfolio");
+        var raw = portfolioRaw();
         if (!raw) return null;
         raw = raw.replace(/ /g, "+").replace(/-/g, "+").replace(/_/g, "/");
         while (raw.length % 4) raw += "=";
