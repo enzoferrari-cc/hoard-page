@@ -205,7 +205,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.60</div>
+  <div class="ver">v0.0.61</div>
   <div class="stale" id="stale" hidden>
     有新版本 <button type="button" id="reload">刷新</button>
   </div>
@@ -507,38 +507,78 @@
       // quantities and treats liabilities and perps the same way the totals do.
       // Older points without balances fall back to that day's qty at that day's
       // price, never to today's holding.
-      // Unfiltered: use the per-currency total the database already computed.
-      // Filtered: add up row_value for just the ids that match, because a
-      // filtered view cannot be expressed as a currency total, and snap.qty is
-      // summed per symbol so it would ignore which row the filter picked.
-      // An id that does not exist on a given day simply contributes nothing.
-      function series(tab) {
-        var matched = (state.data.holdings || []).filter(function (row) {
-          if (row.qty == null || row.count === "exposure" || isFutures(row) || !rowMatch(row)) return false;
-          return anchorOf(currencyOf(row, quoteFor(row, null))) === tab;
+      // Every row that ever existed, keyed by id. The catalog carries closed
+      // rows; current holdings are merged in so the page still works if the
+      // catalog is unavailable or a row has not been catalogued yet.
+      function catalogTable() {
+        if (state._catalog) return state._catalog;
+        var table = {};
+        (state.data && state.data.holdings || []).forEach(function (row) {
+          if (row && row.id) table[row.id] = row;
         });
+        (state.data && state.data.catalog || []).forEach(function (row) {
+          if (row && row.id) table[row.id] = row;
+        });
+        state._catalog = table;
+        return table;
+      }
+
+      // A currency is decided by the catalog row's own ccy, so a holding that
+      // has since closed still lands on the right tab.
+      function catalogBySymbol(table) {
+        var out = {};
+        Object.keys(table).forEach(function (id) {
+          var row = table[id];
+          if (row && row.symbol && !out[row.symbol]) out[row.symbol] = row;
+        });
+        return out;
+      }
+
+      // Filtered views must consider every row that ever existed, not just the
+      // ones held today: closed rows (a repaid loan, released collateral) still
+      // have history and would otherwise vanish from the curve.
+      function matchedIds(key) {
+        var table = catalogTable();
+        var ids = [];
+        Object.keys(table).forEach(function (id) {
+          var row = table[id];
+          if (!row || row.type === "perp") return;
+          if (anchorOf(row.ccy) !== key) return;
+          if (!accountMatch(row) || !tagMatch(row)) return;
+          ids.push(id);
+        });
+        return ids;
+      }
+
+      // Unfiltered: use the per-currency total the database already computed.
+      // Filtered: add up row_value for just the ids that match. An id absent on
+      // a given day contributes nothing.
+      function series(tab) {
         var filtered = state.accounts.length > 0 || state.tags.length > 0;
+        if (!filtered) {
+          return (state.data.snapshots || []).map(function (snap) {
+            var book = snap.balances || {};
+            if (book[tab] && isFinite(Number(book[tab].net))) {
+              return { ts: snap.ts, total: Number(book[tab].net), complete: true };
+            }
+            return null;
+          }).filter(Boolean);
+        }
+        var ids = matchedIds(tab);
         return (state.data.snapshots || []).map(function (snap) {
-          if (!matched.length) return null;
-          var book = snap.balances || {};
-          if (!filtered && book[tab] && isFinite(Number(book[tab].net))) {
-            return { ts: snap.ts, total: Number(book[tab].net), complete: true };
-          }
           var rowValue = snap.row_value || {};
           var any = false;
           var total = 0;
-          var complete = true;
-          matched.forEach(function (row) {
-            var value = rowValue[row.id];
-            if (value == null || !isFinite(Number(value))) {
-              // No entry that day: the row did not exist, so it adds nothing.
-              return;
-            }
+          ids.forEach(function (id) {
+            var value = rowValue[id];
+            if (value == null || !isFinite(Number(value))) return;
             any = true;
             total += Number(value);
           });
+          // Nothing matched yet on this day: keep the point at zero so the
+          // curve still spans the window instead of starting late.
           if (!any) return { ts: snap.ts, total: 0, complete: true };
-          return { ts: snap.ts, total: total, complete: complete };
+          return { ts: snap.ts, total: total, complete: true };
         }).filter(Boolean);
       }
 
@@ -1421,14 +1461,21 @@
         var root = remoteConfig.url.replace(/\/$/, "");
         var holdingsPath = remoteConfig.holdingsPath || "/rest/v1/holdings?select=*";
         var snapshotsPath = remoteConfig.snapshotsPath || "/rest/v1/snapshots?select=*&order=ts.asc";
+        var catalogPath = remoteConfig.catalogPath || "/rest/v1/holding_catalog?select=*";
         Promise.all([
           fetch(root + holdingsPath, { headers: headers }),
-          fetch(root + snapshotsPath, { headers: headers })
+          fetch(root + snapshotsPath, { headers: headers }),
+          // Optional: closed rows live only here, but a missing catalog must not
+          // take the whole page down.
+          fetch(root + catalogPath, { headers: headers }).catch(function () { return null; })
         ]).then(function (responses) {
-          if (responses.some(function (res) { return !res.ok; })) throw new Error("read");
-          return Promise.all(responses.map(function (res) { return res.json(); }));
+          if (responses.slice(0, 2).some(function (res) { return !res.ok; })) throw new Error("read");
+          return Promise.all(responses.map(function (res) {
+            return res && res.ok ? res.json() : null;
+          }));
         }).then(function (parts) {
-          state.data = { holdings: parts[0] || [], snapshots: parts[1] || [] };
+          state.data = { holdings: parts[0] || [], snapshots: parts[1] || [], catalog: parts[2] || [] };
+          state._catalog = null;
           state.notice = "";
           render();
         }).catch(function () {
