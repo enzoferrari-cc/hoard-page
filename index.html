@@ -67,11 +67,26 @@
       pointer-events: none;
     }
     ul { list-style: none; margin: 0; padding: 0; }
-    li {
+    .sheet { width: 100%; }
+    .head, li {
       display: grid;
-      grid-template-columns: 28px 1.2fr 1fr 1fr 1.2fr 52px;
+      grid-template-columns: 28px 1.4fr 0.8fr 0.8fr 1fr 52px 0.9fr;
       gap: 10px;
       align-items: center;
+    }
+    .head { padding: 0 0 8px; }
+    .head button {
+      border: 0;
+      background: transparent;
+      color: #8a8f98;
+      font: 11px/1.2 ui-sans-serif, system-ui, sans-serif;
+      text-align: right;
+      padding: 0;
+      cursor: pointer;
+    }
+    .head button.left { text-align: left; }
+    .head button.on { color: #eef0f3; }
+    li {
       padding: 11px 0;
       border-top: 1px solid #22242a;
       font-family: ui-monospace, Menlo, Consolas, monospace;
@@ -88,15 +103,23 @@
       color: #8a8f98;
       font-size: 10px;
     }
-    .sym { color: #eef0f3; }
+    .sym { color: #eef0f3; font-family: ui-sans-serif, system-ui, sans-serif; }
+    .tags { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+    .tag {
+      border: 1px solid #2a2d33;
+      border-radius: 999px;
+      padding: 2px 6px;
+      color: #8a8f98;
+      font: 10px/1.4 ui-sans-serif, system-ui, sans-serif;
+    }
     .muted, .empty { color: #8a8f98; }
     .neg { color: #e36b6b; }
     .right { text-align: right; }
     .empty { margin-top: 18vh; font-size: 28px; }
     @media (max-width: 680px) {
       .split { grid-template-columns: 1fr; }
-      li { grid-template-columns: 28px 1fr 1fr; }
-      li span:nth-child(n + 5) { display: none; }
+      .head, li { grid-template-columns: 28px 1fr 1fr; }
+      .head button:nth-child(n + 4), li span:nth-child(n + 5) { display: none; }
     }
   </style>
 </head>
@@ -111,7 +134,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.5</div>
+  <div class="ver">v0.0.6</div>
   <script>
     (function () {
       var TABS = [
@@ -119,7 +142,21 @@
         { id: "HKD", mark: "HK$" },
         { id: "USD", mark: "$" }
       ];
-      var state = { data: null, tab: "USD" };
+      var state = { data: null, tab: "CNY", sort: "value", dir: -1 };
+      var PIE = ["#8b7cff", "#3ecfb2", "#f0b429", "#ff7a90", "#5aa9ff", "#c084fc", "#f08a5d", "#7ddea2"];
+      var NAMES = {
+        "510300": "沪深300ETF",
+        "510500": "中证500ETF",
+        "513050": "中概互联ETF",
+        "513310": "中韩半导体ETF",
+        "518880": "黄金ETF",
+        "0700.HK": "腾讯控股",
+        "ETH": "以太坊",
+        "BTC": "比特币",
+        "XPL": "XPL",
+        "USDC": "USD Coin",
+        "USDT": "Tether"
+      };
 
       function decodePortfolio() {
         var raw = new URLSearchParams(location.search).get("portfolio");
@@ -168,6 +205,40 @@
         if (typeof found === "number") return { price: found, ccy: currencyOf(row) };
         if (found && typeof found.price === "number") return found;
         return null;
+      }
+
+      function baseTicker(symbol) {
+        return String(symbol || "").replace(/-LOAN$/i, "");
+      }
+
+      function displayName(row) {
+        var ticker = baseTicker(row.symbol);
+        return NAMES[ticker] || NAMES[row.symbol] || ticker;
+      }
+
+      function iconKey(row) {
+        var ticker = baseTicker(row.symbol);
+        var source = typeof row.price === "string" ? row.price.toLowerCase() : "";
+        if (ticker === "ETH" || ticker === "BTC" || ticker === "USDC" || ticker === "USDT") return ticker;
+        if (ticker.toUpperCase().slice(-3) === ".HK" || source.indexOf("tencent:hk") === 0) return "HK";
+        if (/^\d{6}$/.test(ticker) || source.indexOf("tencent:sh") === 0 || source.indexOf("tencent:sz") === 0) return "A";
+        return "generic";
+      }
+
+      function iconFor(row) {
+        var paths = {
+          ETH: '<path d="M16 4l8 12-8 4-8-4z" fill="#8b7cff"/><path d="M16 28l8-12-8 4-8-4z" fill="#5b4ed1"/>',
+          BTC: '<circle cx="16" cy="16" r="10" fill="none" stroke="#f0b429" stroke-width="2"/><path d="M13 10h5.2a2.6 2.6 0 010 5.2H13zm0 5.2h6a2.6 2.6 0 010 5.2H13z" fill="#f0b429"/>',
+          USDC: '<circle cx="16" cy="16" r="10" fill="none" stroke="#5aa9ff" stroke-width="2"/>',
+          USDT: '<circle cx="16" cy="16" r="10" fill="none" stroke="#3ecfb2" stroke-width="2"/>',
+          HK: '<rect x="7" y="7" width="18" height="18" rx="4" fill="none" stroke="#ff7a90" stroke-width="2"/><path d="M11 20V12h3.2a2.4 2.4 0 010 4.8H11" fill="none" stroke="#ff7a90" stroke-width="1.6"/>',
+          A: '<rect x="7" y="7" width="18" height="18" rx="4" fill="none" stroke="#f08a5d" stroke-width="2"/><path d="M16 11l5 10h-2.2l-.9-2H14l-.9 2H11z" fill="#f08a5d"/>',
+          generic: '<circle cx="16" cy="16" r="7" fill="#8b7cff"/>'
+        };
+        var wrap = document.createElement("span");
+        wrap.className = "av";
+        wrap.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true">' + paths[iconKey(row)] + "</svg>";
+        return wrap;
       }
 
       function markFor(row) {
@@ -262,6 +333,15 @@
         if (value == null || !isFinite(value)) return "—";
         var arrow = value > 0 ? "↑ " : value < 0 ? "↓ " : "";
         return arrow + Math.abs(value * 100).toFixed(1) + "%";
+      }
+
+      function sortValue(item, total) {
+        if (state.sort === "name") return displayName(item.row);
+        if (state.sort === "qty") return Number(item.row.qty);
+        if (state.sort === "price") return item.price;
+        if (state.sort === "share") return total ? item.value / total : 0;
+        if (state.sort === "tag") return (item.row.tags || []).join(",");
+        return item.value;
       }
 
       function el(tag, className, text) {
@@ -376,8 +456,7 @@
           var y2 = 84 + r * Math.sin(end - 0.01);
           path.setAttribute("d", "M" + x1.toFixed(2) + " " + y1.toFixed(2) + " A" + r + " " + r + " 0 " + large + " 1 " + x2.toFixed(2) + " " + y2.toFixed(2));
           path.setAttribute("fill", "none");
-          path.setAttribute("stroke", "#8b7cff");
-          path.setAttribute("stroke-opacity", String(1 - (index % 4) * 0.22));
+          path.setAttribute("stroke", PIE[index % PIE.length]);
           path.setAttribute("stroke-width", "14");
           path.setAttribute("stroke-linecap", "butt");
           svg.appendChild(path);
@@ -440,19 +519,42 @@
         donut.appendChild(drawDonut(rows));
         donut.appendChild(el("div", "count", String(rows.length)));
         split.appendChild(donut);
+        var sheet = el("div", "sheet");
+        var head = el("div", "head");
+        head.appendChild(el("span", ""));
+        [["name", "名称", "left"], ["qty", "数量", ""], ["price", "现价", ""], ["value", "市值", ""], ["share", "占比", ""], ["tag", "标签", ""]].forEach(function (col) {
+          var button = el("button", (col[2] ? col[2] + " " : "") + (state.sort === col[0] ? "on" : ""), col[1] + (state.sort === col[0] ? (state.dir < 0 ? " ↓" : " ↑") : ""));
+          button.type = "button";
+          button.addEventListener("click", function () {
+            state.dir = state.sort === col[0] ? -state.dir : (col[0] === "name" || col[0] === "tag" ? 1 : -1);
+            state.sort = col[0];
+            render();
+          });
+          head.appendChild(button);
+        });
+        sheet.appendChild(head);
         var list = document.createElement("ul");
-        rows.slice().sort(function (a, b) { return Math.abs(b.value) - Math.abs(a.value); }).forEach(function (item) {
+        rows.slice().sort(function (a, b) {
+          var av = sortValue(a, total);
+          var bv = sortValue(b, total);
+          if (typeof av === "string") return av.localeCompare(bv) * state.dir;
+          return (av - bv) * state.dir;
+        }).forEach(function (item) {
           var li = document.createElement("li");
-          li.appendChild(el("span", "av", markFor(item.row)));
-          li.appendChild(el("span", "sym", item.row.symbol));
+          li.appendChild(iconFor(item.row));
+          li.appendChild(el("span", "sym", displayName(item.row)));
           li.appendChild(el("span", "right" + (item.row.qty < 0 ? " neg" : ""), new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(item.row.qty).replace("-", "−")));
           li.appendChild(el("span", "right muted", formatNum(item.price, item.price >= 100 ? 0 : 2)));
           li.appendChild(el("span", "right" + (item.value < 0 ? " neg" : ""), formatNum(item.value, Math.abs(item.value) >= 100 ? 0 : 2)));
           var share = total ? item.value / total : null;
           li.appendChild(el("span", "right muted", share == null ? "—" : (share * 100).toFixed(0) + "%"));
+          var tags = el("span", "tags");
+          (item.row.tags || []).forEach(function (tag) { tags.appendChild(el("span", "tag", tag)); });
+          li.appendChild(tags);
           list.appendChild(li);
         });
-        split.appendChild(list);
+        sheet.appendChild(list);
+        split.appendChild(sheet);
         app.appendChild(split);
       }
 
