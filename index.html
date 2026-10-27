@@ -70,7 +70,7 @@
     .sheet { width: 100%; }
     .head, li {
       display: grid;
-      grid-template-columns: 14px 1.4fr 0.8fr 0.8fr 1fr 52px 0.9fr;
+      grid-template-columns: 14px 22px 1.4fr 0.8fr 0.8fr 1fr 52px 0.9fr;
       gap: 10px;
       align-items: center;
     }
@@ -98,6 +98,8 @@
       border-radius: 50%;
       justify-self: center;
     }
+    .logo { width: 22px; height: 22px; }
+    .logo svg { width: 22px; height: 22px; display: block; }
     .sym { color: #eef0f3; font-family: ui-sans-serif, system-ui, sans-serif; display: block; }
     .code { color: #8a8f98; font: 10px/1.3 ui-monospace, Menlo, Consolas, monospace; }
     .tags { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
@@ -114,7 +116,7 @@
     .empty { margin-top: 18vh; font-size: 28px; }
     @media (max-width: 680px) {
       .split { grid-template-columns: 1fr; }
-      .head, li { grid-template-columns: 14px 1fr 1fr; }
+      .head, li { grid-template-columns: 14px 22px 1fr 1fr; }
       .head button:nth-child(n + 4), li span:nth-child(n + 5) { display: none; }
     }
   </style>
@@ -130,7 +132,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.8</div>
+  <div class="ver">v0.0.9</div>
   <script>
     (function () {
       var TABS = [
@@ -229,6 +231,22 @@
           return wrap;
         }
         wrap.textContent = markFor(row);
+        return wrap;
+      }
+
+      // Crypto icons from spothq/cryptocurrency-icons, CC0-1.0. Stocks have no icon.
+      function logoFor(row) {
+        var ticker = baseTicker(row.symbol).toUpperCase();
+        var logos = {
+          ETH: '<svg viewBox="0 0 32 32" aria-hidden="true"><g fill="none"><circle cx="16" cy="16" r="16" fill="#627EEA"/><g fill="#FFF"><path fill-opacity=".6" d="M16.5 4v8.87l7.5 3.35z"/><path d="M16.5 4L9 16.22l7.5-3.35z"/><path fill-opacity=".6" d="M16.5 21.97V28L24 17.62z"/><path d="M16.5 28v-6.03L9 17.62z"/><path fill-opacity=".2" d="M16.5 20.57l7.5-4.35-7.5-3.35z"/><path fill-opacity=".6" d="M9 16.22l7.5 4.35v-7.7z"/></g></g></svg>',
+          BTC: '<svg viewBox="0 0 32 32" aria-hidden="true"><g fill="none"><circle cx="16" cy="16" r="16" fill="#F7931A"/><path fill="#FFF" d="M23.2 14c.3-2.1-1.3-3.2-3.5-4l.7-2.8-1.7-.4-.7 2.8c-.5-.1-.9-.2-1.4-.3l.7-2.8-1.7-.4-.7 2.8c-.4-.1-.7-.2-1.1-.3v0l-2.4-.6-.5 1.8s1.3.3 1.3.3c.7.2.8.6.8 1l-.8 3.2c0 0 .1 0 .2.1l-.2 0-1.1 4.5c-.1.2-.3.5-.8.4 0 0-1.3-.3-1.3-.3l-.9 2 2.3.6c.4.1.8.2 1.2.3l-.7 2.9 1.7.4.7-2.8c.5.1.9.2 1.4.4l-.7 2.8 1.7.4.7-2.9c3 .6 5.2.3 6.1-2.3.8-2.1 0-3.4-1.6-4.2 1.1-.3 2-1 2.2-2.5zm-4 5.5c-.5 2.1-4.1 1-5.3.7l.9-3.8c1.2.3 4.9.9 4.4 3.1zm.5-5.6c-.5 2-3.5 1-4.5.7l.9-3.4c1 .2 4.1.7 3.6 2.7z"/></g></svg>',
+          USDC: '<svg viewBox="0 0 32 32" aria-hidden="true"><g fill="none"><circle cx="16" cy="16" r="16" fill="#3E73C4"/><path fill="#FFF" d="M20 18.1c0-2.1-1.3-2.8-3.8-3.1-1.8-.3-2.2-.7-2.2-1.6s.6-1.4 1.8-1.4c1.1 0 1.7.4 2 1.3h1.4v-.1a3 3 0 00-2.7-2.5V9.1h-1.4v1.4c-1.8.2-3 1.5-3 3 0 2 1.2 2.8 3.8 3.1 1.7.3 2.3.7 2.3 1.6s-.9 1.6-2 1.6c-1.6 0-2.1-.7-2.3-1.6h-1.5v.1c.2 1.5 1.2 2.6 3.2 2.9v1.5h1.4V21.3c1.8-.3 3-1.6 3-3.2z"/></g></svg>',
+          USDT: '<svg viewBox="0 0 32 32" aria-hidden="true"><g fill="none"><circle cx="16" cy="16" r="16" fill="#26A17B"/><path fill="#FFF" d="M17.9 17.4v0c-.1 0-.7 0-1.9 0-1 0-1.7 0-2 0v0c-3.9-.2-6.8-.8-6.8-1.7s2.9-1.5 6.8-1.6v2.6c.3 0 1 .1 2 .1s1.8 0 1.9-.1v-2.6c3.9.2 6.8.8 6.8 1.6s-2.9 1.5-6.8 1.7m0-3.6V11.4h5.4V7.8H8.6v3.6h5.4v2.4c-4.4.2-7.7 1.1-7.7 2.1s3.3 1.9 7.7 2.1v7.6h3.9v-7.6c4.4-.2 7.7-1.1 7.7-2.1s-3.3-1.9-7.7-2.1"/></g></svg>'
+        };
+        var wrap = document.createElement("span");
+        wrap.className = "logo";
+        var svg = logos[baseTicker(row.symbol).toUpperCase()];
+        if (svg) wrap.innerHTML = svg;
         return wrap;
       }
 
@@ -514,6 +532,7 @@
         var sheet = el("div", "sheet");
         var head = el("div", "head");
         head.appendChild(el("span", ""));
+        head.appendChild(el("span", ""));
         [["name", "Asset", "left"], ["qty", "Qty", ""], ["price", "Price", ""], ["value", "Value", ""], ["share", "%", ""], ["tag", "Tags", ""]].forEach(function (col) {
           var button = el("button", (col[2] ? col[2] + " " : "") + (state.sort === col[0] ? "on" : ""), col[1] + (state.sort === col[0] ? (state.dir < 0 ? " ↓" : " ↑") : ""));
           button.type = "button";
@@ -536,6 +555,7 @@
           var dot = el("span", "dot");
           dot.style.background = item.color;
           li.appendChild(dot);
+          li.appendChild(logoFor(item.row));
           var name = el("span", "name");
           name.appendChild(el("span", "sym", displayName(item.row)));
           name.appendChild(el("span", "code", baseTicker(item.row.symbol)));
