@@ -63,6 +63,7 @@
     }
     .ccy-switch.on { color: #eef0f3; }
     li.child { padding-left: 28px; }
+    li.focus { background: rgba(139, 124, 255, 0.08); }
     .active { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
     .ranges { display: flex; gap: 12px; align-items: center; margin-top: 14px; color: #8a8f98; font-size: 13px; font-variant-numeric: tabular-nums; }
     .range { border: 0; background: transparent; color: #8a8f98; font: 500 13px/1 Inter, ui-sans-serif, system-ui, sans-serif; padding: 0; cursor: pointer; }
@@ -166,7 +167,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.23</div>
+  <div class="ver">v0.0.24</div>
   <script>
     (function () {
       var TABS = [
@@ -174,7 +175,7 @@
         { id: "HKD", mark: "HK$" },
         { id: "USD", mark: "$" }
       ];
-      var state = { data: null, tab: "CNY", tags: [], open: {}, range: "1y", sort: "value", dir: -1 };
+      var state = { data: null, tab: "CNY", tags: [], open: {}, focus: null, metric: "price", range: "1y", sort: "value", dir: -1 };
       var RANGES = ["7d", "30d", "3m", "6m", "1y"];
       function palette(index) {
         return "hsl(" + Math.round((index * 137.508) % 360) + " 68% 64%)";
@@ -500,9 +501,25 @@
         return d;
       }
 
+      function symbolSeries(ticker, metric) {
+        return (state.data.snapshots || []).map(function (snap) {
+          var items = rowsFor(state.tab, snap).filter(function (item) { return item.ticker === ticker; });
+          if (!items.length) return null;
+          var qty = items.reduce(function (sum, item) { return sum + Number(item.row.qty); }, 0);
+          var value = items.reduce(function (sum, item) { return sum + item.value; }, 0);
+          return {
+            ts: snap.ts,
+            total: metric === "qty" ? qty : metric === "price" ? items[0].price : value,
+            complete: true,
+            backfill: snap.source === "backfill"
+          };
+        }).filter(Boolean);
+      }
+
       function drawChart(points) {
         var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         svg.setAttribute("viewBox", "0 0 760 180");
+        svg.style.overflow = "visible";
         svg.setAttribute("role", "img");
         if (points.length < 2) return svg;
         var defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
@@ -514,8 +531,20 @@
         var pad = (max - min) * 0.16;
         min -= pad;
         max += pad;
-        function x(i) { return 8 + (i / (points.length - 1)) * 744; }
-        function y(value) { return 12 + (1 - (value - min) / (max - min)) * 150; }
+        var dataMin = Math.min.apply(null, points.map(function (point) { return point.total; }));
+        var dataMax = Math.max.apply(null, points.map(function (point) { return point.total; }));
+        function x(i) { return 72 + (i / (points.length - 1)) * 620; }
+        function y(value) { return 16 + (1 - (value - min) / (max - min)) * 142; }
+        function axis(text, yPos) {
+          var node = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          node.setAttribute("x", "0");
+          node.setAttribute("y", yPos);
+          node.setAttribute("fill", "#8a8f98");
+          node.setAttribute("font-size", "11");
+          node.setAttribute("font-family", "Inter, sans-serif");
+          node.textContent = text;
+          svg.appendChild(node);
+        }
         var segment = [];
         function flush() {
           if (segment.length < 2) { segment = []; return; }
@@ -548,6 +577,19 @@
           segment.push({ i: i, backfill: point.backfill });
         });
         flush();
+        var digits = Math.abs(dataMax) >= 100 ? 0 : 2;
+        axis(formatNum(dataMax, digits), 14);
+        axis(formatNum((dataMax + dataMin) / 2, digits), 94);
+        axis(formatNum(dataMin, digits), 168);
+        var last = points[points.length - 1];
+        var end = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        end.setAttribute("x", "700");
+        end.setAttribute("y", Math.max(14, y(last.total)));
+        end.setAttribute("fill", "#eef0f3");
+        end.setAttribute("font-size", "11");
+        end.setAttribute("font-family", "Inter, sans-serif");
+        end.textContent = formatNum(last.total, digits);
+        svg.appendChild(end);
         return svg;
       }
 
@@ -636,6 +678,7 @@
 
       function positionRow(group, item) {
         var li = document.createElement("li");
+        if (!item && state.focus === group.ticker) li.className = "focus";
         var name = el("span", "name");
         if (!item) {
           var logo = logoFor(group.items[0].row);
@@ -656,6 +699,12 @@
           }
           name.appendChild(text);
           li.appendChild(name);
+          li.addEventListener("click", function (event) {
+            if (event.target.closest(".tag") || event.target.closest(".expander")) return;
+            state.focus = state.focus === group.ticker ? null : group.ticker;
+            if (!state.metric) state.metric = "price";
+            render();
+          });
           li.appendChild(el("span", "right" + (group.qty < 0 ? " neg" : ""), new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(group.qty).replace("-", "−")));
           li.appendChild(el("span", "right muted", group.price == null ? "—" : formatNum(group.price, group.price >= 100 ? 0 : 2)));
           li.appendChild(el("span", "right" + (group.value < 0 ? " neg" : ""), formatNum(group.value, Math.abs(group.value) >= 100 ? 0 : 2)));
@@ -703,7 +752,7 @@
         var latest = latestSnap();
         var rows = rowsFor(state.tab, latest);
         var total = rows.reduce(function (sum, item) { return sum + item.value; }, 0);
-        var daily = inRange(series(state.tab));
+        var daily = inRange(state.focus ? symbolSeries(state.focus, state.metric) : series(state.tab));
         var points = downsample(daily);
         var hero = el("section", "hero");
         var line = el("div", "total-line");
@@ -735,6 +784,20 @@
         var pct = change(daily);
         ranges.appendChild(el("span", pct > 0 ? "up" : pct < 0 ? "down" : "", formatPct(pct)));
         hero.appendChild(ranges);
+        if (state.focus) {
+          var metrics = el("div", "ranges");
+          metrics.appendChild(el("span", "muted", state.focus));
+          [["qty", "Qty"], ["price", "Price"], ["value", "Value"]].forEach(function (item) {
+            var button = el("button", "range" + (state.metric === item[0] ? " on" : ""), item[1]);
+            button.type = "button";
+            button.addEventListener("click", function () {
+              state.metric = item[0];
+              render();
+            });
+            metrics.appendChild(button);
+          });
+          hero.appendChild(metrics);
+        }
         if (state.tags.length) {
           var active = el("div", "active");
           state.tags.forEach(function (tag) {
