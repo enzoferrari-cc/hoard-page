@@ -164,7 +164,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.18</div>
+  <div class="ver">v0.0.19</div>
   <script>
     (function () {
       var TABS = [
@@ -606,7 +606,10 @@
           li.appendChild(el("span", "right" + (group.qty < 0 ? " neg" : ""), new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(group.qty).replace("-", "−")));
           li.appendChild(el("span", "right muted", group.price == null ? "—" : formatNum(group.price, group.price >= 100 ? 0 : 2)));
           li.appendChild(el("span", "right" + (group.value < 0 ? " neg" : ""), formatNum(group.value, Math.abs(group.value) >= 100 ? 0 : 2)));
-          li.appendChild(el("span", "tags"));
+          li.appendChild(tagList(group.items.reduce(function (all, item) {
+            (item.row.tags || []).forEach(function (tag) { if (all.indexOf(tag) < 0) all.push(tag); });
+            return all;
+          }, [])));
           return li;
         }
         li.className = "child";
@@ -615,8 +618,13 @@
         li.appendChild(el("span", "right" + (item.row.qty < 0 ? " neg" : ""), new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(item.row.qty).replace("-", "−")));
         li.appendChild(el("span", "right muted", formatNum(item.price, item.price >= 100 ? 0 : 2)));
         li.appendChild(el("span", "right" + (item.value < 0 ? " neg" : ""), formatNum(item.value, Math.abs(item.value) >= 100 ? 0 : 2)));
-        var tags = el("span", "tags");
-        (item.row.tags || []).forEach(function (tag) {
+        li.appendChild(tagList(item.row.tags || []));
+        return li;
+      }
+
+      function tagList(tags) {
+        var host = el("span", "tags");
+        tags.forEach(function (tag) {
           var chip = el("button", "tag", tag);
           chip.type = "button";
           paintTag(chip, tag, state.tags.indexOf(tag) >= 0);
@@ -626,10 +634,9 @@
             else state.tags.push(tag);
             render();
           });
-          tags.appendChild(chip);
+          host.appendChild(chip);
         });
-        li.appendChild(tags);
-        return li;
+        return host;
       }
 
       function render() {
