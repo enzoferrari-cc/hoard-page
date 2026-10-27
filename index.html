@@ -179,7 +179,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.50</div>
+  <div class="ver">v0.0.51</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -253,7 +253,12 @@
         if (row.ccy) return String(row.ccy).toUpperCase();
         if (quote && quote.ccy) return String(quote.ccy).toUpperCase();
         var source = typeof row.price === "string" ? row.price : "";
-        if (source.indexOf("tencent:") === 0) return source.slice(8, 10).toLowerCase() === "hk" ? "HKD" : "CNY";
+        if (source.indexOf("tencent:") === 0) {
+          var market = source.slice(8, 10).toLowerCase();
+          if (market === "hk") return "HKD";
+          if (market === "us") return "USD";
+          return "CNY";
+        }
         if (source.indexOf("yahoo:") === 0) return source.toUpperCase().slice(-3) === ".HK" ? "HKD" : "USD";
         if (source.indexOf("okx:") === 0 && source.indexOf("-") > 0) return source.split("-").pop().toUpperCase();
         if (source.indexOf("fixed:") === 0) return (source.split(":")[2] || row.symbol || "USD").toUpperCase();
@@ -317,7 +322,7 @@
         img.src = "icons/" + ticker + ".svg";
         img.addEventListener("error", function () {
           if (img.dataset.fallback) {
-            wrap.replaceChildren();
+            wrap.remove();
             return;
           }
           img.dataset.fallback = "1";
