@@ -41,6 +41,30 @@
       font-size: 10px;
       letter-spacing: 0.08em;
     }
+    .stale {
+      position: fixed;
+      right: 16px;
+      bottom: 40px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      font-size: 11px;
+      border: 1px solid #2a2d33;
+      border-radius: 6px;
+      background: #16171a;
+      color: #eef0f3;
+    }
+    .stale[hidden] { display: none; }
+    .stale button {
+      border: 1px solid #2a2d33;
+      background: #1e2024;
+      color: #eef0f3;
+      font: inherit;
+      padding: 2px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
     .hero { margin-top: 54px; }
     .total {
       margin: 0;
@@ -180,8 +204,53 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.55</div>
+  <div class="ver">v0.0.56</div>
+  <div class="stale" id="stale" hidden>
+    有新版本 <button type="button" id="reload">刷新</button>
+  </div>
   <script>
+  // GitHub Pages pins HTML to cache-control max-age=600, so a tab can sit on an
+  // old build for ten minutes after a deploy. Ask for the current version with a
+  // unique query (so the CDN cannot answer from that cache) and offer a reload
+  // when the served page is older than what is deployed.
+  (function watchVersion() {
+    var here = document.querySelector(".ver");
+    if (!here || !window.fetch) return;
+    function isNewer(a, b) {
+      var pa = String(a).replace(/^v/i, "").split(".");
+      var pb = String(b).replace(/^v/i, "").split(".");
+      for (var i = 0; i < Math.max(pa.length, pb.length); i++) {
+        var na = Number(pa[i] || 0);
+        var nb = Number(pb[i] || 0);
+        if (!isFinite(na) || !isFinite(nb)) return false;
+        if (na !== nb) return na > nb;
+      }
+      return false;
+    }
+    function check() {
+      fetch("version.txt?t=" + Date.now(), { cache: "no-store" })
+        .then(function (r) { return r.ok ? r.text() : null; })
+        .then(function (text) {
+          if (!text) return;
+          var there = text.trim();
+          var mine = (here.textContent || "").trim();
+          if (!there || !mine || there === mine) return;
+          // Only prompt when what is deployed is genuinely newer than this copy.
+          if (!isNewer(there, mine)) return;
+          var box = document.getElementById("stale");
+          if (box) box.hidden = false;
+          var button = document.getElementById("reload");
+          if (button && !button.dataset.bound) {
+            button.dataset.bound = "1";
+            button.addEventListener("click", function () { location.reload(); });
+          }
+        })
+        .catch(function () {});
+    }
+    check();
+    setInterval(check, 60000);
+  })();
+
 /**
  * Skipped minification because the original files appears to be already minified.
  * Original file: /npm/chart.js@4.4.6/dist/chart.umd.js
