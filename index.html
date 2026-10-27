@@ -179,7 +179,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.46</div>
+  <div class="ver">v0.0.47</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -829,6 +829,48 @@
         return snaps.length ? snaps[snaps.length - 1] : null;
       }
 
+      function usdPer(fx, ccy) {
+        if (ccy === "USD") return 1;
+        var rate = fx && fx[ccy];
+        if (typeof rate === "number") return rate;
+        if (rate && typeof rate.usd === "number") return rate.usd;
+        return null;
+      }
+
+      function combinedUsd(fx) {
+        var latest = latestSnap();
+        var sum = 0;
+        var missing = false;
+        ["CNY", "HKD", "USD"].forEach(function (id) {
+          var rate = usdPer(fx, id);
+          if (rate == null) missing = true;
+          var total = rowsFor(id, latest).reduce(function (acc, item) { return acc + (item.value || 0); }, 0);
+          if (rate != null) sum += total * rate;
+        });
+        return missing ? null : sum;
+      }
+
+      function ensureFx() {
+        var latest = latestSnap();
+        if (latest && latest.fx && usdPer(latest.fx, "CNY") && usdPer(latest.fx, "HKD")) {
+          state.fx = latest.fx;
+          return;
+        }
+        if (state.fx || state.fxLoading) return;
+        state.fxLoading = true;
+        fetch("https://api.frankfurter.dev/v1/latest?from=USD&to=CNY,HKD").then(function (res) {
+          if (!res.ok) throw new Error("fx");
+          return res.json();
+        }).then(function (data) {
+          var rates = data.rates || {};
+          state.fx = { USD: 1, CNY: rates.CNY ? 1 / rates.CNY : null, HKD: rates.HKD ? 1 / rates.HKD : null };
+          state.fxLoading = false;
+          render();
+        }).catch(function () {
+          state.fxLoading = false;
+        });
+      }
+
       function positionRow(group, item) {
         var row = document.createElement("tr");
         if (!item && state.focus === group.ticker) row.className = "focus";
@@ -930,6 +972,7 @@
           app.appendChild(el("p", "empty", state.notice || "—"));
           return;
         }
+        ensureFx();
         var latest = latestSnap();
         var rows = rowsFor(state.tab, latest);
         var total = rows.reduce(function (sum, item) { return sum + (item.value || 0); }, 0);
@@ -964,6 +1007,14 @@
         });
         line.appendChild(ccys);
         hero.appendChild(line);
+        if (!state.focus && state.fx) {
+          var all = combinedUsd(state.fx);
+          var cny = usdPer(state.fx, "CNY");
+          var hkd = usdPer(state.fx, "HKD");
+          var fxText = "全部约合 " + (all == null ? "—" : "$" + formatNum(all, Math.abs(all) >= 100 ? 0 : 2));
+          if (cny && hkd) fxText += " · 1 USD = " + (1 / cny).toFixed(2) + " CNY · " + (1 / hkd).toFixed(2) + " HKD";
+          hero.appendChild(el("div", "ranges", fxText));
+        }
         var ranges = el("div", "ranges");
         RANGES.forEach(function (id) {
           var button = el("button", "range" + (state.range === id ? " on" : ""), id);
