@@ -70,7 +70,7 @@
     .sheet { width: 100%; }
     .head, li {
       display: grid;
-      grid-template-columns: 14px 22px 1.4fr 0.8fr 0.8fr 1fr 52px 0.9fr;
+      grid-template-columns: 14px 22px 1.4fr 0.8fr 0.8fr 1fr 52px 1.3fr;
       gap: 10px;
       align-items: center;
     }
@@ -102,7 +102,18 @@
     .logo svg { width: 22px; height: 22px; display: block; }
     .sym { color: #eef0f3; font-family: ui-sans-serif, system-ui, sans-serif; display: block; }
     .code { color: #8a8f98; font: 10px/1.3 ui-monospace, Menlo, Consolas, monospace; }
-    .tags { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+    .filters { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; max-width: 520px; }
+    .chip {
+      border: 1px solid #2a2d33;
+      background: #16171a;
+      color: #8a8f98;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font: 12px/1 ui-sans-serif, system-ui, sans-serif;
+      cursor: pointer;
+    }
+    .chip.on { color: #0e0f11; background: #8b7cff; border-color: #8b7cff; }
+    .tags { display: flex; gap: 4px; flex-wrap: nowrap; justify-content: flex-end; }
     .tag {
       border: 1px solid #2a2d33;
       border-radius: 999px;
@@ -132,7 +143,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.9</div>
+  <div class="ver">v0.0.10</div>
   <script>
     (function () {
       var TABS = [
@@ -140,7 +151,7 @@
         { id: "HKD", mark: "HK$" },
         { id: "USD", mark: "$" }
       ];
-      var state = { data: null, tab: "CNY", sort: "value", dir: -1 };
+      var state = { data: null, tab: "CNY", tags: [], sort: "value", dir: -1 };
       function palette(index) {
         return "hsl(" + Math.round((index * 137.508) % 360) + " 68% 64%)";
       }
@@ -267,11 +278,17 @@
         return { anchor: anchor, price: quote.price, value: Number(row.qty) * quote.price };
       }
 
+      function tagMatch(row) {
+        if (!state.tags.length) return true;
+        var tags = row.tags || [];
+        return state.tags.every(function (tag) { return tags.indexOf(tag) >= 0; });
+      }
+
       function rowsFor(tab, snap) {
         return (state.data.holdings || []).map(function (row) {
           var valued = lineValue(row, snap);
-          if (!valued || valued.anchor !== tab) return null;
-          return { row: row, price: valued.price, value: valued.value };
+          if (!valued || valued.anchor !== tab || !tagMatch(row)) return null;
+          return { row: row, ticker: baseTicker(row.symbol), price: valued.price, value: valued.value };
         }).filter(Boolean);
       }
 
@@ -296,7 +313,7 @@
 
       function series(tab) {
         var expected = (state.data.holdings || []).filter(function (row) {
-          if (row.qty == null || row.count === "exposure") return false;
+          if (row.qty == null || row.count === "exposure" || !tagMatch(row)) return false;
           return anchorOf(currencyOf(row, quoteFor(row, null))) === tab;
         });
         return (state.data.snapshots || []).map(function (snap) {
@@ -450,7 +467,16 @@
       function drawDonut(rows) {
         var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         svg.setAttribute("viewBox", "0 0 168 168");
-        var positives = rows.filter(function (item) { return item.value > 0; });
+        var nets = {};
+        var order = [];
+        rows.forEach(function (item) {
+          if (!nets[item.ticker]) {
+            nets[item.ticker] = { ticker: item.ticker, value: 0, color: item.color };
+            order.push(item.ticker);
+          }
+          nets[item.ticker].value += item.value;
+        });
+        var positives = order.map(function (key) { return nets[key]; }).filter(function (item) { return item.value > 0; });
         var sum = positives.reduce(function (total, item) { return total + item.value; }, 0);
         var start = -Math.PI / 2;
         positives.forEach(function (item, index) {
@@ -474,15 +500,46 @@
         return svg;
       }
 
-      function renderTabs() {
+      function availableTags() {
+        var found = [];
+        (state.data && state.data.holdings || []).forEach(function (row) {
+          var valued = lineValue(row, latestSnap());
+          if (!valued || valued.anchor !== state.tab) return;
+          (row.tags || []).forEach(function (tag) {
+            if (found.indexOf(tag) < 0) found.push(tag);
+          });
+        });
+        return found;
+      }
+
+      function renderFilters() {
         var host = document.getElementById("tabs");
+        host.className = "filters";
         host.textContent = "";
         TABS.forEach(function (tab) {
-          var button = el("button", "tab" + (state.tab === tab.id ? " on" : ""), tab.mark);
+          var button = el("button", "chip" + (state.tab === tab.id ? " on" : ""), tab.id);
           button.type = "button";
-          button.disabled = rowsFor(tab.id, latestSnap()).length === 0;
           button.addEventListener("click", function () {
             state.tab = tab.id;
+            var known = availableTags();
+            state.tags = state.tags.filter(function (tag) { return known.indexOf(tag) >= 0; });
+            render();
+          });
+          host.appendChild(button);
+        });
+        availableTags().forEach(function (tag, index) {
+          var on = state.tags.indexOf(tag) >= 0;
+          var button = el("button", "chip" + (on ? " on" : ""), tag);
+          button.type = "button";
+          button.style.borderColor = palette(index + 3);
+          if (on) {
+            button.style.background = palette(index + 3);
+            button.style.color = "#0e0f11";
+          }
+          button.addEventListener("click", function () {
+            var at = state.tags.indexOf(tag);
+            if (at >= 0) state.tags.splice(at, 1);
+            else state.tags.push(tag);
             render();
           });
           host.appendChild(button);
@@ -497,14 +554,18 @@
       function render() {
         var app = document.getElementById("app");
         app.textContent = "";
-        renderTabs();
+        renderFilters();
         if (!state.data) {
           app.appendChild(el("p", "empty", "—"));
           return;
         }
         var latest = latestSnap();
         var rows = rowsFor(state.tab, latest);
-        rows.forEach(function (item, index) { item.color = palette(index); });
+        var tickers = [];
+        rows.forEach(function (item) {
+          if (tickers.indexOf(item.ticker) < 0) tickers.push(item.ticker);
+          item.color = palette(tickers.indexOf(item.ticker));
+        });
         if (!rows.length) {
           app.appendChild(el("p", "empty", "—"));
           return;
@@ -512,7 +573,7 @@
         var total = rows.reduce(function (sum, item) { return sum + item.value; }, 0);
         var points = series(state.tab);
         var hero = el("section", "hero");
-        var figure = el("p", "total" + (total < 0 ? " neg" : ""), formatNum(total, Math.abs(total) >= 100 || total === 0 ? 0 : 2));
+        var figure = el("p", "total" + (total < 0 ? " neg" : ""), formatNum(total, Math.abs(total) >= 100 || total === 0 ? 0 : 2) + " " + state.tab);
         hero.appendChild(figure);
         var moves = el("div", "moves");
         [["W", change(points, "week")], ["M", change(points, "month")]].forEach(function (item) {
@@ -527,7 +588,8 @@
         var split = el("section", "split");
         var donut = el("div", "donut");
         donut.appendChild(drawDonut(rows));
-        donut.appendChild(el("div", "count", String(rows.length)));
+        var tickerCount = rows.reduce(function (list, item) { if (list.indexOf(item.ticker) < 0) list.push(item.ticker); return list; }, []).length;
+        donut.appendChild(el("div", "count", String(tickerCount)));
         split.appendChild(donut);
         var sheet = el("div", "sheet");
         var head = el("div", "head");
