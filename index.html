@@ -179,7 +179,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.42</div>
+  <div class="ver">v0.0.43</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -323,6 +323,12 @@
         var quote = quoteFor(row, snap);
         var anchor = anchorOf(currencyOf(row, quote));
         if (!quote || !anchor) return null;
+        if (row.type === "perp") {
+          var snaps = (state.data && state.data.snapshots) || [];
+          var reported = (!snap || snap === snaps[snaps.length - 1]) && row.upl != null;
+          var value = reported ? Number(row.upl) : Number(row.qty) * (quote.price - Number(row.avg_px || 0));
+          return { anchor: anchor, price: quote.price, value: value };
+        }
         return { anchor: anchor, price: quote.price, value: Number(row.qty) * quote.price };
       }
 
@@ -922,10 +928,9 @@
           return;
         }
         var latest = latestSnap();
-        var fut = state.tab === "FUT";
-        var rows = fut ? futuresRows(latest) : attachFutures(rowsFor(state.tab, latest));
+        var rows = rowsFor(state.tab, latest);
         var total = rows.reduce(function (sum, item) { return sum + item.value; }, 0);
-        var daily = inRange(fut ? (state.focus ? futuresSymbolSeries(state.focus) : futuresSeries()) : (state.focus ? symbolCurves(state.focus) : series(state.tab)));
+        var daily = inRange(state.focus ? symbolCurves(state.focus) : series(state.tab));
         var points = downsample(daily);
         var shown = total;
         var shownText = "—";
@@ -943,7 +948,7 @@
         var line = el("div", "total-line");
         line.appendChild(el("p", "total" + (shown < 0 ? " neg" : ""), shownText));
         var ccys = el("div", "ccys");
-        ["CNY", "HKD", "USD", "FUT"].forEach(function (id) {
+        ["CNY", "HKD", "USD"].forEach(function (id) {
           var button = el("button", "ccy-switch" + (state.tab === id ? " on" : ""), id);
           button.type = "button";
           button.addEventListener("click", function () {
@@ -966,15 +971,8 @@
           });
           ranges.appendChild(button);
         });
-        if (fut) {
-          var complete = daily.filter(function (point) { return point.complete; });
-          var delta = complete.length >= 2 ? complete[complete.length - 1].total - complete[0].total : null;
-          var text = delta == null ? "—" : (delta > 0 ? "+" : "") + compact(delta);
-          ranges.appendChild(el("span", delta > 0 ? "up" : delta < 0 ? "down" : "", text));
-        } else {
-          var pct = change(daily);
-          ranges.appendChild(el("span", pct > 0 ? "up" : pct < 0 ? "down" : "", formatPct(pct)));
-        }
+        var pct = change(daily);
+        ranges.appendChild(el("span", pct > 0 ? "up" : pct < 0 ? "down" : "", formatPct(pct)));
         hero.appendChild(ranges);
         if (state.tags.length) {
           var active = el("div", "active");
@@ -1226,7 +1224,7 @@
 
       try { state.data = decodePortfolio(); } catch (error) { state.data = null; }
       var requested = (hashParams().get("tab") || "").toLowerCase();
-      var tabFromUrl = { cny: "CNY", hkd: "HKD", usd: "USD", fut: "FUT" }[requested];
+      var tabFromUrl = { cny: "CNY", hkd: "HKD", usd: "USD" }[requested];
       state.tab = tabFromUrl || "CNY";
       var asset = hashParams().get("asset");
       if (asset) state.focus = asset;
