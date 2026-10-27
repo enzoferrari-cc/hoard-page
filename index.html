@@ -205,7 +205,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.59</div>
+  <div class="ver">v0.0.60</div>
   <div class="stale" id="stale" hidden>
     有新版本 <button type="button" id="reload">刷新</button>
   </div>
@@ -507,30 +507,38 @@
       // quantities and treats liabilities and perps the same way the totals do.
       // Older points without balances fall back to that day's qty at that day's
       // price, never to today's holding.
+      // Unfiltered: use the per-currency total the database already computed.
+      // Filtered: add up row_value for just the ids that match, because a
+      // filtered view cannot be expressed as a currency total, and snap.qty is
+      // summed per symbol so it would ignore which row the filter picked.
+      // An id that does not exist on a given day simply contributes nothing.
       function series(tab) {
-        var expected = (state.data.holdings || []).filter(function (row) {
+        var matched = (state.data.holdings || []).filter(function (row) {
           if (row.qty == null || row.count === "exposure" || isFutures(row) || !rowMatch(row)) return false;
           return anchorOf(currencyOf(row, quoteFor(row, null))) === tab;
         });
-        var filtered = state.tags.length > 0;
+        var filtered = state.accounts.length > 0 || state.tags.length > 0;
         return (state.data.snapshots || []).map(function (snap) {
-          if (!expected.length) return null;
+          if (!matched.length) return null;
           var book = snap.balances || {};
           if (!filtered && book[tab] && isFinite(Number(book[tab].net))) {
             return { ts: snap.ts, total: Number(book[tab].net), complete: true };
           }
-          var bookQty = snap.qty || {};
-          var valued = expected.map(function (row) {
-            var qty = bookQty[row.symbol];
-            var price = snapPrice(snap, row.symbol, null);
-            if (qty == null || price == null || !isFinite(Number(qty))) return lineValue(row, snap);
-            return { anchor: tab, price: price, value: Number(qty) * price };
+          var rowValue = snap.row_value || {};
+          var any = false;
+          var total = 0;
+          var complete = true;
+          matched.forEach(function (row) {
+            var value = rowValue[row.id];
+            if (value == null || !isFinite(Number(value))) {
+              // No entry that day: the row did not exist, so it adds nothing.
+              return;
+            }
+            any = true;
+            total += Number(value);
           });
-          return {
-            ts: snap.ts,
-            total: valued.reduce(function (sum, item) { return sum + (item ? item.value : 0); }, 0),
-            complete: valued.every(Boolean)
-          };
+          if (!any) return { ts: snap.ts, total: 0, complete: true };
+          return { ts: snap.ts, total: total, complete: complete };
         }).filter(Boolean);
       }
 
