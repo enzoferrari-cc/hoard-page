@@ -167,7 +167,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.25</div>
+  <div class="ver">v0.0.26</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -448,6 +448,12 @@
         if (complete.length < 2 || !complete[0].total) return null;
         var last = complete[complete.length - 1];
         return (last.total - complete[0].total) / complete[0].total;
+      }
+
+      function formatFlex(value, digits) {
+        var abs = Math.abs(value);
+        var body = new Intl.NumberFormat("en-US", { maximumFractionDigits: digits }).format(abs);
+        return value < 0 ? "−" + body : body;
       }
 
       function formatNum(value, digits) {
@@ -804,9 +810,23 @@
         var total = rows.reduce(function (sum, item) { return sum + item.value; }, 0);
         var daily = inRange(state.focus ? symbolSeries(state.focus, state.metric) : series(state.tab));
         var points = downsample(daily);
+        var shown = total;
+        var shownText = "—";
+        if (state.focus) {
+          var lastPoint = null;
+          daily.forEach(function (point) { if (point.complete) lastPoint = point; });
+          if (lastPoint) {
+            shown = lastPoint.total;
+            shownText = state.metric === "qty"
+              ? formatFlex(shown, Math.abs(shown) >= 100 ? 0 : 4)
+              : formatNum(shown, Math.abs(shown) >= 100 || shown === 0 ? 0 : 2);
+          }
+        } else if (rows.length) {
+          shownText = formatNum(total, Math.abs(total) >= 100 || total === 0 ? 0 : 2);
+        }
         var hero = el("section", "hero");
         var line = el("div", "total-line");
-        line.appendChild(el("p", "total" + (total < 0 ? " neg" : ""), rows.length ? formatNum(total, Math.abs(total) >= 100 || total === 0 ? 0 : 2) : "—"));
+        line.appendChild(el("p", "total" + (shown < 0 ? " neg" : ""), shownText));
         var ccys = el("div", "ccys");
         ["CNY", "HKD", "USD"].forEach(function (id) {
           var button = el("button", "ccy-switch" + (state.tab === id ? " on" : ""), id);
