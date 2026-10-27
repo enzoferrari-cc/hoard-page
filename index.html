@@ -180,7 +180,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.54</div>
+  <div class="ver">v0.0.55</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -209,7 +209,8 @@
       var TABS = [
         { id: "CNY", mark: "¥" },
         { id: "HKD", mark: "HK$" },
-        { id: "USD", mark: "$" }
+        { id: "USD", mark: "$" },
+        { id: "GBP", mark: "£" }
       ];
       var state = { data: null, notice: "", tab: "CNY", tags: [], open: {}, focus: null, metric: "price", range: "1y", sort: "value", dir: -1 };
       // Publishable client settings only. Never put a secret key here.
@@ -250,10 +251,22 @@
         return JSON.parse(new TextDecoder().decode(bytes));
       }
 
+      // The price snapshot stamps every quote with its own ccy, which is the
+      // only reliable signal for the IBKR rows (yh:, cash:). Prefer it over
+      // sniffing the source prefix; the prefix is a fallback for rows that have
+      // no quote yet.
       function currencyOf(row, quote) {
         if (row.ccy) return String(row.ccy).toUpperCase();
         if (quote && quote.ccy) return String(quote.ccy).toUpperCase();
         var source = typeof row.price === "string" ? row.price : "";
+        if (source.indexOf("cash:") === 0) return source.slice(5).toUpperCase() || null;
+        if (source.indexOf("bosera:") === 0) return "USD";
+        if (source.indexOf("yh:") === 0) {
+          var code = source.slice(3).toUpperCase();
+          if (/\.L$/.test(code)) return "GBP";
+          if (/\.TO$/.test(code)) return "USD";
+          return "USD";
+        }
         if (source.indexOf("tencent:") === 0) {
           var market = source.slice(8, 10).toLowerCase();
           if (market === "hk") return "HKD";
@@ -270,7 +283,7 @@
         if (!ccy) return null;
         ccy = ccy.toUpperCase();
         if (ccy === "USD" || ccy === "USDT" || ccy === "USDC") return "USD";
-        if (ccy === "HKD" || ccy === "CNY") return ccy;
+        if (ccy === "HKD" || ccy === "CNY" || ccy === "GBP") return ccy;
         return null;
       }
 
