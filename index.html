@@ -51,14 +51,18 @@
       font-weight: 300;
       font-variant-numeric: tabular-nums;
     }
+    .total-line { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+    .ccys { display: flex; gap: 10px; }
     .ccy-switch {
       border: 0;
       background: transparent;
-      color: inherit;
-      font: inherit;
+      color: #8a8f98;
+      font: 500 14px/1 Inter, ui-sans-serif, system-ui, sans-serif;
       cursor: pointer;
       padding: 0;
     }
+    .ccy-switch.on { color: #eef0f3; }
+    li.child { padding-left: 28px; }
     .active { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
     .moves { display: flex; gap: 18px; margin-top: 14px; color: #8a8f98; font-size: 13px; font-variant-numeric: tabular-nums; }
     .up { color: #8b7cff; }
@@ -108,6 +112,14 @@
     .logo { width: 22px; height: 22px; }
     .logo svg { width: 22px; height: 22px; display: block; }
     .name { display: flex; align-items: center; gap: 8px; }
+    .name button.expander {
+      border: 0;
+      background: transparent;
+      color: #eef0f3;
+      font: inherit;
+      padding: 0;
+      cursor: pointer;
+    }
     .sym { color: #eef0f3; font-family: Inter, ui-sans-serif, system-ui, sans-serif; display: block; }
     .code { color: #8a8f98; font: 10px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; }
     .filters { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; max-width: 520px; }
@@ -152,7 +164,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.17</div>
+  <div class="ver">v0.0.18</div>
   <script>
     (function () {
       var TABS = [
@@ -160,7 +172,7 @@
         { id: "HKD", mark: "HK$" },
         { id: "USD", mark: "$" }
       ];
-      var state = { data: null, tab: "CNY", tags: [], sort: "value", dir: -1 };
+      var state = { data: null, tab: "CNY", tags: [], open: {}, sort: "value", dir: -1 };
       function palette(index) {
         return "hsl(" + Math.round((index * 137.508) % 360) + " 68% 64%)";
       }
@@ -569,6 +581,57 @@
         return snaps.length ? snaps[snaps.length - 1] : null;
       }
 
+      function positionRow(group, item) {
+        var li = document.createElement("li");
+        var name = el("span", "name");
+        if (!item) {
+          var logo = logoFor(group.items[0].row);
+          if (logo.querySelector("svg")) name.appendChild(logo);
+          var text = el("span", "name-text");
+          if (group.items.length > 1) {
+            var toggle = el("button", "expander", (state.open[group.ticker] ? "▾ " : "▸ ") + (group.name || group.ticker));
+            toggle.type = "button";
+            toggle.addEventListener("click", function () {
+              state.open[group.ticker] = !state.open[group.ticker];
+              render();
+            });
+            text.appendChild(toggle);
+            if (group.name) text.appendChild(el("span", "code", group.ticker));
+          } else {
+            text.appendChild(el("span", "sym", group.name || group.ticker));
+            if (group.name) text.appendChild(el("span", "code", group.ticker));
+          }
+          name.appendChild(text);
+          li.appendChild(name);
+          li.appendChild(el("span", "right" + (group.qty < 0 ? " neg" : ""), new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(group.qty).replace("-", "−")));
+          li.appendChild(el("span", "right muted", group.price == null ? "—" : formatNum(group.price, group.price >= 100 ? 0 : 2)));
+          li.appendChild(el("span", "right" + (group.value < 0 ? " neg" : ""), formatNum(group.value, Math.abs(group.value) >= 100 ? 0 : 2)));
+          li.appendChild(el("span", "tags"));
+          return li;
+        }
+        li.className = "child";
+        name.appendChild(el("span", "sym", (item.row.tags || []).join(" ")));
+        li.appendChild(name);
+        li.appendChild(el("span", "right" + (item.row.qty < 0 ? " neg" : ""), new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(item.row.qty).replace("-", "−")));
+        li.appendChild(el("span", "right muted", formatNum(item.price, item.price >= 100 ? 0 : 2)));
+        li.appendChild(el("span", "right" + (item.value < 0 ? " neg" : ""), formatNum(item.value, Math.abs(item.value) >= 100 ? 0 : 2)));
+        var tags = el("span", "tags");
+        (item.row.tags || []).forEach(function (tag) {
+          var chip = el("button", "tag", tag);
+          chip.type = "button";
+          paintTag(chip, tag, state.tags.indexOf(tag) >= 0);
+          chip.addEventListener("click", function () {
+            var at = state.tags.indexOf(tag);
+            if (at >= 0) state.tags.splice(at, 1);
+            else state.tags.push(tag);
+            render();
+          });
+          tags.appendChild(chip);
+        });
+        li.appendChild(tags);
+        return li;
+      }
+
       function render() {
         var app = document.getElementById("app");
         app.textContent = "";
@@ -582,19 +645,22 @@
         var total = rows.reduce(function (sum, item) { return sum + item.value; }, 0);
         var points = series(state.tab);
         var hero = el("section", "hero");
-        var figure = el("p", "total" + (total < 0 ? " neg" : ""));
-        figure.appendChild(document.createTextNode((rows.length ? formatNum(total, Math.abs(total) >= 100 || total === 0 ? 0 : 2) : "—") + " "));
-        var switcher = el("button", "ccy-switch", state.tab);
-        switcher.type = "button";
-        switcher.addEventListener("click", function () {
-          var order = ["CNY", "HKD", "USD"];
-          state.tab = order[(order.indexOf(state.tab) + 1) % order.length];
-          var known = availableTags();
-          state.tags = state.tags.filter(function (tag) { return known.indexOf(tag) >= 0; });
-          render();
+        var line = el("div", "total-line");
+        line.appendChild(el("p", "total" + (total < 0 ? " neg" : ""), rows.length ? formatNum(total, Math.abs(total) >= 100 || total === 0 ? 0 : 2) : "—"));
+        var ccys = el("div", "ccys");
+        ["CNY", "HKD", "USD"].forEach(function (id) {
+          var button = el("button", "ccy-switch" + (state.tab === id ? " on" : ""), id);
+          button.type = "button";
+          button.addEventListener("click", function () {
+            state.tab = id;
+            var known = availableTags();
+            state.tags = state.tags.filter(function (tag) { return known.indexOf(tag) >= 0; });
+            render();
+          });
+          ccys.appendChild(button);
         });
-        figure.appendChild(switcher);
-        hero.appendChild(figure);
+        line.appendChild(ccys);
+        hero.appendChild(line);
         var moves = el("div", "moves");
         [["W", change(points, "week")], ["M", change(points, "month")]].forEach(function (item) {
           var node = el("span", item[1] > 0 ? "up" : item[1] < 0 ? "down" : "", item[0] + " " + formatPct(item[1]));
@@ -634,41 +700,32 @@
         sheet.appendChild(head);
         app.appendChild(sheet);
         var list = document.createElement("ul");
+        var groups = {};
+        var order = [];
         rows.slice().sort(function (a, b) {
           var av = sortValue(a, total);
           var bv = sortValue(b, total);
           if (typeof av === "string") return av.localeCompare(bv) * state.dir;
           return (av - bv) * state.dir;
         }).forEach(function (item) {
-          var li = document.createElement("li");
-          var name = el("span", "name");
-          var logo = logoFor(item.row);
-          if (logo.querySelector("svg")) name.appendChild(logo);
-          var text = el("span", "name-text");
-          var ticker = baseTicker(item.row.symbol);
-          var alias = item.row.name && item.row.name !== item.row.symbol && item.row.name !== ticker;
-          text.appendChild(el("span", "sym", alias ? item.row.name : ticker));
-          if (alias) text.appendChild(el("span", "code", ticker));
-          name.appendChild(text);
-          li.appendChild(name);
-          li.appendChild(el("span", "right" + (item.row.qty < 0 ? " neg" : ""), new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(item.row.qty).replace("-", "−")));
-          li.appendChild(el("span", "right muted", formatNum(item.price, item.price >= 100 ? 0 : 2)));
-          li.appendChild(el("span", "right" + (item.value < 0 ? " neg" : ""), formatNum(item.value, Math.abs(item.value) >= 100 ? 0 : 2)));
-          var tags = el("span", "tags");
-          (item.row.tags || []).forEach(function (tag) {
-            var chip = el("button", "tag", tag);
-            chip.type = "button";
-            paintTag(chip, tag, state.tags.indexOf(tag) >= 0);
-            chip.addEventListener("click", function () {
-              var at = state.tags.indexOf(tag);
-              if (at >= 0) state.tags.splice(at, 1);
-              else state.tags.push(tag);
-              render();
-            });
-            tags.appendChild(chip);
-          });
-          li.appendChild(tags);
-          list.appendChild(li);
+          var bucket = groups[item.ticker];
+          if (!bucket) {
+            bucket = { ticker: item.ticker, items: [] };
+            groups[item.ticker] = bucket;
+            order.push(bucket);
+          }
+          bucket.items.push(item);
+        });
+        order.forEach(function (group) {
+          group.qty = group.items.reduce(function (sum, item) { return sum + Number(item.row.qty); }, 0);
+          group.value = group.items.reduce(function (sum, item) { return sum + item.value; }, 0);
+          group.price = group.items.every(function (item) { return item.price === group.items[0].price; }) ? group.items[0].price : null;
+          var named = group.items.map(function (item) { return item.row.name; }).filter(Boolean);
+          group.name = named.length && named[0] !== group.ticker && named.every(function (name) { return name === named[0]; }) ? named[0] : null;
+          list.appendChild(positionRow(group, false));
+          if (group.items.length > 1 && state.open[group.ticker]) {
+            group.items.forEach(function (item) { list.appendChild(positionRow(group, item)); });
+          }
         });
         sheet.appendChild(list);
       }
