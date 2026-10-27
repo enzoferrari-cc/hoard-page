@@ -143,7 +143,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.10</div>
+  <div class="ver">v0.0.11</div>
   <script>
     (function () {
       var TABS = [
@@ -619,8 +619,10 @@
           li.appendChild(dot);
           li.appendChild(logoFor(item.row));
           var name = el("span", "name");
-          name.appendChild(el("span", "sym", displayName(item.row)));
-          name.appendChild(el("span", "code", baseTicker(item.row.symbol)));
+          var ticker = baseTicker(item.row.symbol);
+          var alias = item.row.name && item.row.name !== item.row.symbol && item.row.name !== ticker;
+          name.appendChild(el("span", "sym", alias ? item.row.name : ticker));
+          if (alias) name.appendChild(el("span", "code", ticker));
           li.appendChild(name);
           li.appendChild(el("span", "right" + (item.row.qty < 0 ? " neg" : ""), new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(item.row.qty).replace("-", "−")));
           li.appendChild(el("span", "right muted", formatNum(item.price, item.price >= 100 ? 0 : 2)));
