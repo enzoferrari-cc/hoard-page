@@ -155,7 +155,8 @@
       cursor: pointer;
     }
     .chip.on { color: #0e0f11; background: #8b7cff; border-color: #8b7cff; }
-    .tags, .active { display: flex; gap: 4px; flex-wrap: nowrap; justify-content: flex-end; min-width: 0; }
+    .tags { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+    .active { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-start; min-width: 0; }
     .more { position: relative; }
     .more .all {
       display: none;
@@ -204,7 +205,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.57</div>
+  <div class="ver">v0.0.58</div>
   <div class="stale" id="stale" hidden>
     有新版本 <button type="button" id="reload">刷新</button>
   </div>
@@ -281,7 +282,7 @@
         { id: "USD", mark: "$" },
         { id: "GBP", mark: "£" }
       ];
-      var state = { data: null, notice: "", tab: "CNY", tags: [], open: {}, focus: null, metric: "price", range: "1y", sort: "value", dir: -1 };
+      var state = { data: null, notice: "", tab: "CNY", accounts: [], tags: [], open: {}, focus: null, metric: "price", range: "1y", sort: "value", dir: -1 };
       // Publishable client settings only. Never put a secret key here.
       var remoteConfig = window.HOARD_SUPABASE || {"url": "https://fzkygqfqfkuuojsgupmr.supabase.co", "publishableKey": "sb_publishable_W5WUq3LmKd8yaxcnOmVsTg_oYONBoFO"};
       var chart = null;
@@ -450,21 +451,34 @@
         return { anchor: anchor, price: quote.price, value: Number(row.qty) * quote.price };
       }
 
+      // The account lives in its own column now, so it filters on its own
+      // instead of hiding inside tags.
+      function accountMatch(row) {
+        if (!state.accounts.length) return true;
+        return state.accounts.indexOf(String(row.account || "")) >= 0;
+      }
+
       function tagMatch(row) {
         if (!state.tags.length) return true;
         var tags = row.tags || [];
         return state.tags.every(function (tag) { return tags.indexOf(tag) >= 0; });
       }
 
+      function rowMatch(row) {
+        return accountMatch(row) && tagMatch(row);
+      }
+
+      // Perp legs are marked by the type column (they also carry upl/avg_px);
+      // the old "Futures" tag no longer exists.
       function isFutures(row) {
-        return (row.tags || []).indexOf("Futures") >= 0;
+        return row.type === "perp";
       }
 
       function rowsFor(tab, snap) {
         return (state.data.holdings || []).map(function (row) {
           if (isFutures(row)) return null;
           var valued = lineValue(row, snap);
-          if (!valued || valued.anchor !== tab || !tagMatch(row)) return null;
+          if (!valued || valued.anchor !== tab || !rowMatch(row)) return null;
           return { row: row, ticker: baseTicker(row.symbol), price: valued.price, value: valued.value };
         }).filter(Boolean);
       }
@@ -495,7 +509,7 @@
       // price, never to today's holding.
       function series(tab) {
         var expected = (state.data.holdings || []).filter(function (row) {
-          if (row.qty == null || row.count === "exposure" || isFutures(row) || !tagMatch(row)) return false;
+          if (row.qty == null || row.count === "exposure" || isFutures(row) || !rowMatch(row)) return false;
           return anchorOf(currencyOf(row, quoteFor(row, null))) === tab;
         });
         var filtered = state.tags.length > 0;
@@ -913,16 +927,23 @@
         return svg;
       }
 
-      function availableTags() {
+      // Only offer facet values that exist in the current tab, so the picker
+      // never shows a choice that would empty the table.
+      function facetValues(key) {
         var found = [];
         (state.data && state.data.holdings || []).forEach(function (row) {
           var valued = lineValue(row, latestSnap());
           if (!valued || valued.anchor !== state.tab || isFutures(row)) return;
-          (row.tags || []).forEach(function (tag) {
-            if (found.indexOf(tag) < 0) found.push(tag);
+          var values = key === "account" ? [String(row.account || "")] : (row.tags || []);
+          values.forEach(function (value) {
+            if (value && found.indexOf(value) < 0) found.push(value);
           });
         });
         return found;
+      }
+
+      function availableTags() {
+        return facetValues("tag");
       }
 
       function latestSnap() {
@@ -974,7 +995,15 @@
           var shared = (group.items[0].row.tags || []).filter(function (tag) {
             return group.items.every(function (item) { return (item.row.tags || []).indexOf(tag) >= 0; });
           });
-          put(tagList(group.items.length > 1 ? shared : (group.items[0].row.tags || [])));
+          var accounts = [];
+          group.items.forEach(function (item) {
+            var name = String(item.row.account || "");
+            if (name && accounts.indexOf(name) < 0) accounts.push(name);
+          });
+          var cell = el("span", "tags");
+          accounts.forEach(function (name) { cell.appendChild(accountChip(name)); });
+          cell.appendChild(tagList(group.items.length > 1 ? shared : (group.items[0].row.tags || [])));
+          put(cell);
           return row;
         }
         row.className = "child";
@@ -983,8 +1012,28 @@
         put(new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(item.row.qty).replace("-", "−"), "right" + (item.row.qty < 0 ? " neg" : ""));
         put(item.price == null ? "—" : formatNum(item.price, item.price >= 100 ? 0 : 2), "right muted");
         put(item.value == null ? "—" : formatNum(item.value, Math.abs(item.value) >= 100 ? 0 : 2), "right" + (item.value < 0 ? " neg" : ""));
-        put(tagList(item.row.tags || []));
+        var cell = el("span", "tags");
+        if (item.row.account) cell.appendChild(accountChip(String(item.row.account)));
+        cell.appendChild(tagList(item.row.tags || []));
+        put(cell);
         return row;
+      }
+
+      // The account is a separate facet from the tags, so it gets its own chip
+      // styling and filters on its own state.
+      function accountChip(name) {
+        var chip = el("button", "tag account", name);
+        chip.type = "button";
+        chip.style.background = state.accounts.indexOf(name) >= 0 ? "rgba(139,124,255,0.22)" : "rgba(255,255,255,0.05)";
+        chip.style.color = state.accounts.indexOf(name) >= 0 ? "#eef0f3" : "#9aa0aa";
+        chip.addEventListener("click", function (event) {
+          event.stopPropagation();
+          var at = state.accounts.indexOf(name);
+          if (at >= 0) state.accounts.splice(at, 1);
+          else state.accounts.push(name);
+          render();
+        });
+        return chip;
       }
 
       function tagChip(tag) {
@@ -1057,8 +1106,10 @@
           button.type = "button";
           button.addEventListener("click", function () {
             state.tab = id;
-            var known = availableTags();
-            state.tags = state.tags.filter(function (tag) { return known.indexOf(tag) >= 0; });
+            var tags = availableTags();
+            state.tags = state.tags.filter(function (tag) { return tags.indexOf(tag) >= 0; });
+            var accts = facetValues("account");
+            state.accounts = state.accounts.filter(function (name) { return accts.indexOf(name) >= 0; });
             render();
           });
           ccys.appendChild(button);
@@ -1078,6 +1129,23 @@
         var pct = change(daily);
         ranges.appendChild(el("span", pct > 0 ? "up" : pct < 0 ? "down" : "", formatPct(pct)));
         hero.appendChild(ranges);
+        var accounts = facetValues("account");
+        if (accounts.length > 1) {
+          var acctRow = el("div", "active");
+          accounts.forEach(function (name) {
+            var on = state.accounts.indexOf(name) >= 0;
+            var chip = el("button", "chip" + (on ? " on" : ""), name);
+            chip.type = "button";
+            chip.addEventListener("click", function () {
+              var at = state.accounts.indexOf(name);
+              if (at >= 0) state.accounts.splice(at, 1);
+              else state.accounts.push(name);
+              render();
+            });
+            acctRow.appendChild(chip);
+          });
+          hero.appendChild(acctRow);
+        }
         if (state.tags.length) {
           var active = el("div", "active");
           state.tags.forEach(function (tag) {
@@ -1103,7 +1171,7 @@
         var sheet = document.createElement("table");
         sheet.className = "sheet";
         var cols = document.createElement("colgroup");
-        ["36%", "13%", "13%", "16%", "22%"].forEach(function (width) {
+        ["32%", "12%", "12%", "15%", "29%"].forEach(function (width) {
           var col = document.createElement("col");
           col.style.width = width;
           cols.appendChild(col);
