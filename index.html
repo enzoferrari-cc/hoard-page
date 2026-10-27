@@ -179,7 +179,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.35</div>
+  <div class="ver">v0.0.36</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -403,7 +403,7 @@
           if (row.qty == null || row.count === "exposure" || isFutures(row) || !tagMatch(row)) return false;
           return anchorOf(currencyOf(row, quoteFor(row, null))) === tab;
         });
-        return (state.data.snapshots || []).filter(function (snap) { return snap.source !== "backfill"; }).map(function (snap) {
+        return (state.data.snapshots || []).map(function (snap) {
           if (!expected.length) return null;
           var valued = expected.map(function (row) { return lineValue(row, snap); });
           return {
@@ -548,7 +548,7 @@
       }
 
       function symbolCurves(ticker) {
-        return (state.data.snapshots || []).filter(function (snap) { return snap.source !== "backfill"; }).map(function (snap) {
+        return (state.data.snapshots || []).map(function (snap) {
           var items = rowsFor(state.tab, snap).filter(function (item) { return item.ticker === ticker; });
           var bookQty = snap.qty || {};
           var qty = bookQty[ticker] != null ? Number(bookQty[ticker]) : (items.length ? items.reduce(function (sum, item) { return sum + Number(item.row.qty); }, 0) : null);
