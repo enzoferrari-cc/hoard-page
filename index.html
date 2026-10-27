@@ -167,7 +167,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.26</div>
+  <div class="ver">v0.0.27</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -531,7 +531,7 @@
         return d;
       }
 
-      function symbolSeries(ticker, metric) {
+      function symbolCurves(ticker) {
         return (state.data.snapshots || []).map(function (snap) {
           var items = rowsFor(state.tab, snap).filter(function (item) { return item.ticker === ticker; });
           var bookQty = snap.qty || {};
@@ -539,9 +539,8 @@
           var found = (snap.prices || {})[ticker];
           var price = typeof found === "number" ? found : (found && typeof found.price === "number" ? found.price : (items[0] ? items[0].price : null));
           var value = qty != null && price != null ? qty * price : (items.length ? items.reduce(function (sum, item) { return sum + item.value; }, 0) : null);
-          var total = metric === "qty" ? qty : metric === "price" ? price : value;
-          if (total == null || !isFinite(total)) return null;
-          return { ts: snap.ts, total: total, complete: true, backfill: snap.source === "backfill" };
+          if ((value == null || !isFinite(value)) && (price == null || !isFinite(price)) && (qty == null || !isFinite(qty))) return null;
+          return { ts: snap.ts, total: value, value: value, price: price, qty: qty, complete: value != null && isFinite(value), backfill: snap.source === "backfill" };
         }).filter(Boolean);
       }
 
@@ -557,37 +556,69 @@
         return sign + trim(abs.toFixed(4));
       }
 
-      function mountChart(canvas, points) {
+      function mountChart(canvas, points, extra) {
         if (chart) { chart.destroy(); chart = null; }
         if (points.length < 2 || typeof Chart === "undefined") return;
         var ctx = canvas.getContext("2d");
         var gradient = ctx.createLinearGradient(0, 0, 0, 220);
         gradient.addColorStop(0, "rgba(139,124,255,0.16)");
         gradient.addColorStop(1, "rgba(139,124,255,0)");
+        function faded(item, solid, pale) {
+          var left = points[item.p0DataIndex];
+          var right = points[item.p1DataIndex];
+          return (left && left.backfill) || (right && right.backfill) ? pale : solid;
+        }
+        function series(label, key, solid, pale, axis, fill) {
+          return {
+            label: label,
+            yAxisID: axis,
+            data: points.map(function (point) {
+              var value = key === "value" ? (point.complete ? point.total : null) : point[key];
+              return value == null || !isFinite(value) ? null : value;
+            }),
+            borderColor: solid,
+            backgroundColor: fill || "transparent",
+            fill: !!fill,
+            tension: 0.35,
+            cubicInterpolationMode: "monotone",
+            borderWidth: 1.75,
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            pointHoverBackgroundColor: "#eef0f3",
+            spanGaps: false,
+            segment: { borderColor: function (item) { return faded(item, solid, pale); } }
+          };
+        }
+        function yAxis(position, color, title, showGrid) {
+          return {
+            position: position,
+            grid: { display: !!showGrid, color: "rgba(255,255,255,0.045)", drawTicks: false },
+            border: { display: false },
+            title: title ? { display: true, text: title, color: color, font: { family: "Inter, sans-serif", size: 10 } } : { display: false },
+            ticks: {
+              color: color,
+              maxTicksLimit: 4,
+              font: { family: "Inter, sans-serif", size: 11 },
+              callback: function (value) { return compact(Number(value)); }
+            }
+          };
+        }
+        var datasets = [series("Value", "value", "#8b7cff", "rgba(139,124,255,0.45)", "y", gradient)];
+        var scales = {
+          x: { display: false, grid: { display: false } },
+          y: yAxis("right", "#8a8f98", extra ? "Value" : "", true)
+        };
+        if (extra) {
+          datasets.push(series("Price", "price", "#7eb6ff", "rgba(126,182,255,0.45)", "yPrice"));
+          datasets.push(series("Qty", "qty", "#e0b07a", "rgba(224,176,122,0.45)", "yQty"));
+          scales.yPrice = yAxis("left", "#7eb6ff", "Price", false);
+          scales.yQty = yAxis("left", "#e0b07a", "Qty", false);
+        }
         chart = new Chart(ctx, {
           type: "line",
           data: {
             labels: points.map(function (point) { return String(point.ts).slice(0, 10); }),
-            datasets: [{
-              data: points.map(function (point) { return point.complete ? point.total : null; }),
-              borderColor: "#8b7cff",
-              backgroundColor: gradient,
-              fill: true,
-              tension: 0.35,
-              cubicInterpolationMode: "monotone",
-              borderWidth: 1.75,
-              pointRadius: 0,
-              pointHoverRadius: 3,
-              pointHoverBackgroundColor: "#eef0f3",
-              spanGaps: false,
-              segment: {
-                borderColor: function (item) {
-                  var left = points[item.p0DataIndex];
-                  var right = points[item.p1DataIndex];
-                  return (left && left.backfill) || (right && right.backfill) ? "rgba(139,124,255,0.45)" : "#8b7cff";
-                }
-              }
-            }]
+            datasets: datasets
           },
           options: {
             animation: false,
@@ -602,31 +633,22 @@
                 borderWidth: 1,
                 titleColor: "#8a8f98",
                 bodyColor: "#eef0f3",
-                displayColors: false,
+                displayColors: !!extra,
                 callbacks: {
                   title: function (items) { return items.length ? items[0].label : ""; },
                   label: function (item) {
                     var value = item.parsed.y;
-                    return formatNum(value, Math.abs(value) >= 100 ? 0 : 2);
+                    if (value == null || !isFinite(value)) return null;
+                    var text = item.dataset.yAxisID === "yQty"
+                      ? formatFlex(value, Math.abs(value) >= 100 ? 0 : 4)
+                      : formatNum(value, Math.abs(value) >= 100 ? 0 : 2);
+                    return extra ? item.dataset.label + "  " + text : text;
                   }
                 }
               },
               hoardCrosshair: {}
             },
-            scales: {
-              x: { display: false, grid: { display: false } },
-              y: {
-                position: "right",
-                grid: { color: "rgba(255,255,255,0.045)", drawTicks: false },
-                border: { display: false },
-                ticks: {
-                  color: "#8a8f98",
-                  maxTicksLimit: 4,
-                  font: { family: "Inter, sans-serif", size: 11 },
-                  callback: function (value) { return compact(Number(value)); }
-                }
-              }
-            }
+            scales: scales
           },
           plugins: [{
             id: "hoardCrosshair",
@@ -757,7 +779,6 @@
           li.addEventListener("click", function (event) {
             if (event.target.closest(".tag") || event.target.closest(".expander")) return;
             state.focus = state.focus === group.ticker ? null : group.ticker;
-            if (!state.metric) state.metric = "price";
             render();
           });
           li.appendChild(el("span", "right" + (group.qty < 0 ? " neg" : ""), new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(group.qty).replace("-", "−")));
@@ -797,6 +818,7 @@
       }
 
       function render() {
+        var scrollY = window.scrollY;
         if (chart) { chart.destroy(); chart = null; }
         var app = document.getElementById("app");
         app.textContent = "";
@@ -808,7 +830,7 @@
         var latest = latestSnap();
         var rows = rowsFor(state.tab, latest);
         var total = rows.reduce(function (sum, item) { return sum + item.value; }, 0);
-        var daily = inRange(state.focus ? symbolSeries(state.focus, state.metric) : series(state.tab));
+        var daily = inRange(state.focus ? symbolCurves(state.focus) : series(state.tab));
         var points = downsample(daily);
         var shown = total;
         var shownText = "—";
@@ -817,9 +839,7 @@
           daily.forEach(function (point) { if (point.complete) lastPoint = point; });
           if (lastPoint) {
             shown = lastPoint.total;
-            shownText = state.metric === "qty"
-              ? formatFlex(shown, Math.abs(shown) >= 100 ? 0 : 4)
-              : formatNum(shown, Math.abs(shown) >= 100 || shown === 0 ? 0 : 2);
+            shownText = formatNum(shown, Math.abs(shown) >= 100 || shown === 0 ? 0 : 2);
           }
         } else if (rows.length) {
           shownText = formatNum(total, Math.abs(total) >= 100 || total === 0 ? 0 : 2);
@@ -854,20 +874,6 @@
         var pct = change(daily);
         ranges.appendChild(el("span", pct > 0 ? "up" : pct < 0 ? "down" : "", formatPct(pct)));
         hero.appendChild(ranges);
-        if (state.focus) {
-          var metrics = el("div", "ranges");
-          metrics.appendChild(el("span", "muted", state.focus));
-          [["qty", "Qty"], ["price", "Price"], ["value", "Value"]].forEach(function (item) {
-            var button = el("button", "range" + (state.metric === item[0] ? " on" : ""), item[1]);
-            button.type = "button";
-            button.addEventListener("click", function () {
-              state.metric = item[0];
-              render();
-            });
-            metrics.appendChild(button);
-          });
-          hero.appendChild(metrics);
-        }
         if (state.tags.length) {
           var active = el("div", "active");
           state.tags.forEach(function (tag) {
@@ -888,7 +894,8 @@
         canvas.setAttribute("role", "img");
         chartBox.appendChild(canvas);
         app.appendChild(chartBox);
-        mountChart(canvas, points);
+        mountChart(canvas, points, !!state.focus);
+        window.scrollTo(0, scrollY);
         var sheet = el("div", "sheet");
         var head = el("div", "head");
         [["name", "Asset", "left"], ["qty", "Qty", ""], ["price", "Price", ""], ["value", "Value", ""], ["tag", "Tags", ""]].forEach(function (col) {
@@ -940,8 +947,6 @@
       state.tab = tabFromUrl || "CNY";
       var asset = hashParams().get("asset");
       if (asset) state.focus = asset;
-      var view = (hashParams().get("view") || "").toLowerCase();
-      if (view === "qty" || view === "price" || view === "value") state.metric = view;
       render();
     })();
   </script>
