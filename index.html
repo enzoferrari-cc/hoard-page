@@ -179,7 +179,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.44</div>
+  <div class="ver">v0.0.45</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -1236,48 +1236,25 @@
       }
 
       function loadRemote() {
-        var script = document.createElement("script");
-        script.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.js";
-        script.onload = function () {
-          var client = window.supabase.createClient(remoteConfig.url, remoteConfig.publishableKey);
-          client.auth.getSession().then(function (result) {
-            var session = result.data && result.data.session;
-            if (!session) {
-              state.notice = "请登录后查看";
-              render();
-              return;
-            }
-            var headers = { apikey: remoteConfig.publishableKey, Authorization: "Bearer " + session.access_token };
-            var root = remoteConfig.url.replace(/\/$/, "");
-            var holdingsPath = remoteConfig.holdingsPath || "/rest/v1/holdings?select=*";
-            var snapshotsPath = remoteConfig.snapshotsPath || "/rest/v1/snapshots?select=*&order=ts.asc";
-            Promise.all([
-              fetch(root + holdingsPath, { headers: headers }),
-              fetch(root + snapshotsPath, { headers: headers })
-            ]).then(function (responses) {
-              if (responses.some(function (res) { return !res.ok; })) throw new Error("read");
-              return Promise.all(responses.map(function (res) { return res.json(); }));
-            }).then(function (parts) {
-              state.data = { holdings: parts[0] || [], snapshots: parts[1] || [] };
-              state.notice = "";
-              render();
-            }).catch(function () {
-              state.data = null;
-              state.notice = "读取失败";
-              render();
-            });
-          }).catch(function () {
-            state.data = null;
-            state.notice = "读取失败";
-            render();
-          });
-        };
-        script.onerror = function () {
+        var headers = { apikey: remoteConfig.publishableKey, Authorization: "Bearer " + remoteConfig.publishableKey };
+        var root = remoteConfig.url.replace(/\/$/, "");
+        var holdingsPath = remoteConfig.holdingsPath || "/rest/v1/holdings?select=*";
+        var snapshotsPath = remoteConfig.snapshotsPath || "/rest/v1/snapshots?select=*&order=ts.asc";
+        Promise.all([
+          fetch(root + holdingsPath, { headers: headers }),
+          fetch(root + snapshotsPath, { headers: headers })
+        ]).then(function (responses) {
+          if (responses.some(function (res) { return !res.ok; })) throw new Error("read");
+          return Promise.all(responses.map(function (res) { return res.json(); }));
+        }).then(function (parts) {
+          state.data = { holdings: parts[0] || [], snapshots: parts[1] || [] };
+          state.notice = "";
+          render();
+        }).catch(function () {
           state.data = null;
           state.notice = "读取失败";
           render();
-        };
-        document.head.appendChild(script);
+        });
       }
     })();
   </script>
