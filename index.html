@@ -179,7 +179,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.45</div>
+  <div class="ver">v0.0.46</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -212,7 +212,7 @@
       ];
       var state = { data: null, notice: "", tab: "CNY", tags: [], open: {}, focus: null, metric: "price", range: "1y", sort: "value", dir: -1 };
       // Publishable client settings only. Never put a secret key here.
-      var remoteConfig = window.HOARD_SUPABASE || null;
+      var remoteConfig = window.HOARD_SUPABASE || {"url": "https://fzkygqfqfkuuojsgupmr.supabase.co", "publishableKey": "sb_publishable_W5WUq3LmKd8yaxcnOmVsTg_oYONBoFO"};
       var chart = null;
       var RANGES = ["7d", "30d", "3m", "6m", "1y"];
       function palette(index) {
@@ -323,14 +323,15 @@
       function lineValue(row, snap) {
         if (row.qty == null || row.count === "exposure") return null;
         var quote = quoteFor(row, snap);
-        var anchor = anchorOf(currencyOf(row, quote));
-        if (!quote || !anchor) return null;
+        var anchor = anchorOf(currencyOf(row, quote) || currencyOf(row, null));
         if (row.type === "perp") {
           var snaps = (state.data && state.data.snapshots) || [];
-          var reported = (!snap || snap === snaps[snaps.length - 1]) && row.upl != null;
-          var value = reported ? Number(row.upl) : Number(row.qty) * (quote.price - Number(row.avg_px || 0));
-          return { anchor: anchor, price: quote.price, value: value };
+          var reported = (!snap || !snaps.length || snap === snaps[snaps.length - 1]) && row.upl != null;
+          var hist = quote ? Number(row.qty) * (quote.price - Number(row.avg_px || 0)) : null;
+          return { anchor: anchor || "USD", price: quote ? quote.price : null, value: reported ? Number(row.upl) : hist };
         }
+        if (!anchor) return null;
+        if (!quote) return { anchor: anchor, price: null, value: null };
         return { anchor: anchor, price: quote.price, value: Number(row.qty) * quote.price };
       }
 
@@ -869,7 +870,7 @@
           });
           put(new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(group.qty).replace("-", "−"), "right" + (group.qty < 0 ? " neg" : ""));
           put(group.price == null ? "—" : formatNum(group.price, group.price >= 100 ? 0 : 2), "right muted");
-          put(formatNum(group.value, Math.abs(group.value) >= 100 ? 0 : 2), "right" + (group.value < 0 ? " neg" : ""));
+          put(group.value == null ? "—" : formatNum(group.value, Math.abs(group.value) >= 100 ? 0 : 2), "right" + (group.value < 0 ? " neg" : ""));
           put(tagList(group.items.reduce(function (all, item) {
             (item.row.tags || []).forEach(function (tag) { if (all.indexOf(tag) < 0) all.push(tag); });
             return all;
@@ -880,8 +881,8 @@
         name.appendChild(el("span", "sym", item.row.side ? (String(item.row.side).toLowerCase() === "short" ? "Short" : "Long") : (item.row.tags || []).join(" ")));
         put(name);
         put(new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(item.row.qty).replace("-", "−"), "right" + (item.row.qty < 0 ? " neg" : ""));
-        put(formatNum(item.price, item.price >= 100 ? 0 : 2), "right muted");
-        put(formatNum(item.value, Math.abs(item.value) >= 100 ? 0 : 2), "right" + (item.value < 0 ? " neg" : ""));
+        put(item.price == null ? "—" : formatNum(item.price, item.price >= 100 ? 0 : 2), "right muted");
+        put(item.value == null ? "—" : formatNum(item.value, Math.abs(item.value) >= 100 ? 0 : 2), "right" + (item.value < 0 ? " neg" : ""));
         put(tagList(item.row.tags || []));
         return row;
       }
@@ -931,7 +932,7 @@
         }
         var latest = latestSnap();
         var rows = rowsFor(state.tab, latest);
-        var total = rows.reduce(function (sum, item) { return sum + item.value; }, 0);
+        var total = rows.reduce(function (sum, item) { return sum + (item.value || 0); }, 0);
         var daily = inRange(state.focus ? symbolCurves(state.focus) : series(state.tab));
         var points = downsample(daily);
         var shown = total;
@@ -1044,7 +1045,7 @@
         });
         order.forEach(function (group) {
           group.qty = group.items.reduce(function (sum, item) { return sum + Number(item.row.qty); }, 0);
-          group.value = group.items.reduce(function (sum, item) { return sum + item.value; }, 0);
+          group.value = group.items.every(function (item) { return item.value == null; }) ? null : group.items.reduce(function (sum, item) { return sum + (item.value || 0); }, 0);
           group.price = group.items.every(function (item) { return item.price === group.items[0].price; }) ? group.items[0].price : null;
           var named = group.items.map(function (item) { return item.row.name; }).filter(Boolean);
           group.name = named.length && named[0] !== group.ticker && named.every(function (name) { return name === named[0]; }) ? named[0] : null;
