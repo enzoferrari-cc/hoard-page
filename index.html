@@ -179,7 +179,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.31</div>
+  <div class="ver">v0.0.32</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -366,8 +366,13 @@
         return state.tags.every(function (tag) { return tags.indexOf(tag) >= 0; });
       }
 
+      function isFutures(row) {
+        return (row.tags || []).indexOf("Futures") >= 0;
+      }
+
       function rowsFor(tab, snap) {
         return (state.data.holdings || []).map(function (row) {
+          if (isFutures(row)) return null;
           var valued = lineValue(row, snap);
           if (!valued || valued.anchor !== tab || !tagMatch(row)) return null;
           return { row: row, ticker: baseTicker(row.symbol), price: valued.price, value: valued.value };
@@ -395,7 +400,7 @@
 
       function series(tab) {
         var expected = (state.data.holdings || []).filter(function (row) {
-          if (row.qty == null || row.count === "exposure" || !tagMatch(row)) return false;
+          if (row.qty == null || row.count === "exposure" || isFutures(row) || !tagMatch(row)) return false;
           return anchorOf(currencyOf(row, quoteFor(row, null))) === tab;
         });
         return (state.data.snapshots || []).map(function (snap) {
@@ -727,7 +732,7 @@
         var found = [];
         (state.data && state.data.holdings || []).forEach(function (row) {
           var valued = lineValue(row, latestSnap());
-          if (!valued || valued.anchor !== state.tab) return;
+          if (!valued || valued.anchor !== state.tab || isFutures(row)) return;
           (row.tags || []).forEach(function (tag) {
             if (found.indexOf(tag) < 0) found.push(tag);
           });
@@ -862,7 +867,7 @@
       function render() {
         var scrollY = window.scrollY;
         var brand = document.getElementById("brand-name");
-        if (brand) brand.textContent = state.focus || "Hoard";
+        if (brand) brand.textContent = state.tab === "FUT" ? "Hoard" : (state.focus || "Hoard");
         if (chart) { chart.destroy(); chart = null; }
         var app = document.getElementById("app");
         app.textContent = "";
@@ -872,13 +877,20 @@
           return;
         }
         var latest = latestSnap();
-        var rows = rowsFor(state.tab, latest);
+        var fut = state.tab === "FUT";
+        var equityRows = (state.data.holdings || []).map(function (row) {
+          if (!isFutures(row)) return null;
+          var valued = lineValue(row, latest);
+          if (!valued) return null;
+          return { row: row, ticker: baseTicker(row.symbol), price: valued.price, value: valued.value };
+        }).filter(Boolean);
+        var rows = fut ? equityRows : rowsFor(state.tab, latest);
         var total = rows.reduce(function (sum, item) { return sum + item.value; }, 0);
-        var daily = inRange(state.focus ? symbolCurves(state.focus) : series(state.tab));
+        var daily = fut ? [] : inRange(state.focus ? symbolCurves(state.focus) : series(state.tab));
         var points = downsample(daily);
         var shown = total;
         var shownText = "—";
-        if (state.focus) {
+        if (!fut && state.focus) {
           var lastPoint = null;
           daily.forEach(function (point) { if (point.complete) lastPoint = point; });
           if (lastPoint) {
@@ -892,7 +904,7 @@
         var line = el("div", "total-line");
         line.appendChild(el("p", "total" + (shown < 0 ? " neg" : ""), shownText));
         var ccys = el("div", "ccys");
-        ["CNY", "HKD", "USD"].forEach(function (id) {
+        ["CNY", "HKD", "USD", "FUT"].forEach(function (id) {
           var button = el("button", "ccy-switch" + (state.tab === id ? " on" : ""), id);
           button.type = "button";
           button.addEventListener("click", function () {
@@ -906,17 +918,25 @@
         line.appendChild(ccys);
         hero.appendChild(line);
         var ranges = el("div", "ranges");
-        RANGES.forEach(function (id) {
-          var button = el("button", "range" + (state.range === id ? " on" : ""), id);
-          button.type = "button";
-          button.addEventListener("click", function () {
-            state.range = id;
-            render();
+        if (fut) {
+          var upl = ((state.data && state.data.positions) || []).reduce(function (sum, row) {
+            var value = row.upl != null ? Number(row.upl) : Number(row.upnl || 0);
+            return sum + (isFinite(value) ? value : 0);
+          }, 0);
+          ranges.appendChild(el("span", upl < 0 ? "down" : upl > 0 ? "up" : "", "uPnL " + formatNum(upl, 2)));
+        } else {
+          RANGES.forEach(function (id) {
+            var button = el("button", "range" + (state.range === id ? " on" : ""), id);
+            button.type = "button";
+            button.addEventListener("click", function () {
+              state.range = id;
+              render();
+            });
+            ranges.appendChild(button);
           });
-          ranges.appendChild(button);
-        });
-        var pct = change(daily);
-        ranges.appendChild(el("span", pct > 0 ? "up" : pct < 0 ? "down" : "", formatPct(pct)));
+          var pct = change(daily);
+          ranges.appendChild(el("span", pct > 0 ? "up" : pct < 0 ? "down" : "", formatPct(pct)));
+        }
         hero.appendChild(ranges);
         if (state.tags.length) {
           var active = el("div", "active");
@@ -933,6 +953,12 @@
           hero.appendChild(active);
         }
         app.appendChild(hero);
+        if (fut) {
+          if (equityRows.length) renderEquity(app, equityRows);
+          renderFutures(app);
+          window.scrollTo(0, scrollY);
+          return;
+        }
         var chartBox = el("section", "chart");
         var canvas = document.createElement("canvas");
         canvas.setAttribute("role", "img");
@@ -996,7 +1022,42 @@
           }
         });
         sheet.appendChild(list);
-        renderFutures(app);
+      }
+
+      function renderEquity(app, rows) {
+        var table = document.createElement("table");
+        table.className = "sheet";
+        var head = document.createElement("tr");
+        head.className = "head";
+        ["Asset", "Qty", "Price", "Value"].forEach(function (label, index) {
+          var cell = document.createElement("th");
+          cell.appendChild(el("button", index ? "" : "left", label));
+          head.appendChild(cell);
+        });
+        var thead = document.createElement("thead");
+        thead.appendChild(head);
+        table.appendChild(thead);
+        var body = document.createElement("tbody");
+        rows.forEach(function (item) {
+          var tr = document.createElement("tr");
+          ["name", "qty", "price", "value"].forEach(function (key) {
+            var cell = document.createElement("td");
+            if (key !== "name") cell.className = "right";
+            if (key === "name") cell.textContent = item.row.name || item.ticker;
+            else if (key === "qty") cell.textContent = formatFlex(Number(item.row.qty), 4);
+            else if (key === "price") cell.textContent = formatNum(item.price, item.price >= 100 ? 0 : 2);
+            else cell.textContent = formatNum(item.value, Math.abs(item.value) >= 100 ? 0 : 2);
+            tr.appendChild(cell);
+          });
+          body.appendChild(tr);
+        });
+        table.appendChild(body);
+        app.appendChild(table);
+      }
+
+      function legUpl(row) {
+        var value = row.upl != null ? Number(row.upl) : Number(row.upnl || 0);
+        return isFinite(value) ? value : 0;
       }
 
       function renderFutures(app) {
@@ -1045,7 +1106,7 @@
           var tr = document.createElement("tr");
           if (!parent) tr.className = "child";
           var net = legs.reduce(function (sum, row) { return sum + Number(row.qty || 0); }, 0);
-          var upl = legs.reduce(function (sum, row) { return sum + Number(row.upl || 0); }, 0);
+          var upl = legs.reduce(function (sum, row) { return sum + legUpl(row); }, 0);
           var name = el("span", "name-text");
           if (parent && legs.length > 1) {
             var line = el("span", "sym");
@@ -1070,10 +1131,11 @@
           tr.appendChild(cellText(formatFlex(parent ? net : Number(legs[0].qty), 4), "right"));
           var entry = parent && legs.length > 1 ? null : legs[0].entry;
           var mark = parent && legs.length > 1 ? legs[legs.length - 1].mark : legs[0].mark;
-          var margin = parent && legs.length > 1 ? null : legs[0].margin;
+          var margin = parent && legs.length > 1 ? null : (legs[0].margin != null ? legs[0].margin : legs[0].margin_ratio);
           tr.appendChild(cellText(entry == null ? "—" : formatNum(entry, entry >= 100 ? 0 : 2), "right muted"));
           tr.appendChild(cellText(mark == null ? "—" : formatNum(mark, mark >= 100 ? 0 : 2), "right muted"));
-          tr.appendChild(cellText(formatNum(parent ? upl : Number(legs[0].upl), 2), "right" + ((parent ? upl : legs[0].upl) < 0 ? " neg" : "")));
+          var rowUpl = parent ? upl : legUpl(legs[0]);
+          tr.appendChild(cellText(formatNum(rowUpl, 2), "right" + (rowUpl < 0 ? " neg" : "")));
           tr.appendChild(cellText(margin == null ? "—" : formatNum(margin, 2), "right muted"));
           body.appendChild(tr);
         }
@@ -1088,7 +1150,7 @@
 
       try { state.data = decodePortfolio(); } catch (error) { state.data = null; }
       var requested = (hashParams().get("tab") || "").toLowerCase();
-      var tabFromUrl = { cny: "CNY", hkd: "HKD", usd: "USD" }[requested];
+      var tabFromUrl = { cny: "CNY", hkd: "HKD", usd: "USD", fut: "FUT" }[requested];
       state.tab = tabFromUrl || "CNY";
       var asset = hashParams().get("asset");
       if (asset) state.focus = asset;
