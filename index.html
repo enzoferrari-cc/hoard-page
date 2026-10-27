@@ -204,7 +204,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.56</div>
+  <div class="ver">v0.0.57</div>
   <div class="stale" id="stale" hidden>
     有新版本 <button type="button" id="reload">刷新</button>
   </div>
@@ -925,36 +925,6 @@
         return found;
       }
 
-      function renderFilters() {
-        var host = document.getElementById("tabs");
-        host.className = "filters";
-        host.textContent = "";
-        TABS.forEach(function (tab) {
-          var button = el("button", "chip" + (state.tab === tab.id ? " on" : ""), tab.id);
-          button.type = "button";
-          button.addEventListener("click", function () {
-            state.tab = tab.id;
-            var known = availableTags();
-            state.tags = state.tags.filter(function (tag) { return known.indexOf(tag) >= 0; });
-            render();
-          });
-          host.appendChild(button);
-        });
-        availableTags().forEach(function (tag, index) {
-          var on = state.tags.indexOf(tag) >= 0;
-          var button = el("button", "chip" + (on ? " on" : ""), tag);
-          button.type = "button";
-          paintTag(button, tag, on);
-          button.addEventListener("click", function () {
-            var at = state.tags.indexOf(tag);
-            if (at >= 0) state.tags.splice(at, 1);
-            else state.tags.push(tag);
-            render();
-          });
-          host.appendChild(button);
-        });
-      }
-
       function latestSnap() {
         var snaps = (state.data && state.data.snapshots) || [];
         return snaps.length ? snaps[snaps.length - 1] : null;
@@ -1081,7 +1051,8 @@
         var line = el("div", "total-line");
         line.appendChild(el("p", "total" + (shown < 0 ? " neg" : ""), shownText));
         var ccys = el("div", "ccys");
-        ["CNY", "HKD", "USD"].forEach(function (id) {
+        TABS.forEach(function (tab) {
+          var id = tab.id;
           var button = el("button", "ccy-switch" + (state.tab === id ? " on" : ""), id);
           button.type = "button";
           button.addEventListener("click", function () {
@@ -1356,7 +1327,10 @@
       }
 
       var requested = (hashParams().get("tab") || "").toLowerCase();
-      var tabFromUrl = { cny: "CNY", hkd: "HKD", usd: "USD" }[requested];
+      var tabFromUrl = null;
+      TABS.forEach(function (tab) {
+        if (requested === tab.id.toLowerCase()) tabFromUrl = tab.id;
+      });
       state.tab = tabFromUrl || "CNY";
       var asset = hashParams().get("asset");
       if (asset) state.focus = asset;
