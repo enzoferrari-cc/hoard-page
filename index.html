@@ -179,7 +179,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.41</div>
+  <div class="ver">v0.0.42</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -385,6 +385,39 @@
         if (typeof found === "number") return found;
         if (found && typeof found.price === "number") return found.price;
         return fallback == null ? null : Number(fallback);
+      }
+
+      function reportedUpl(pos) {
+        var value = pos.upl != null ? Number(pos.upl) : Number(pos.upnl);
+        return isFinite(value) ? value : 0;
+      }
+
+      function attachFutures(rows) {
+        var positions = state.data.positions || [];
+        if (!positions.length || state.tab !== "USD") return rows;
+        var upl = positions.reduce(function (sum, pos) { return sum + reportedUpl(pos); }, 0);
+        rows.forEach(function (item) {
+          var tags = item.row.tags || [];
+          if (item.row.symbol === "USDT" && tags.indexOf("OKX") >= 0 && tags.indexOf("degen") < 0) {
+            item.row = Object.assign({}, item.row, { qty: Number(item.row.qty) - upl });
+            item.value -= upl;
+          }
+        });
+        positions.forEach(function (pos) {
+          rows.push({
+            row: {
+              symbol: pos.symbol + "-PERP",
+              name: pos.symbol + " perp",
+              qty: signedQty(pos),
+              tags: ["Futures"],
+              side: pos.side
+            },
+            ticker: pos.symbol + "-PERP",
+            price: Number(pos.mark),
+            value: reportedUpl(pos)
+          });
+        });
+        return rows;
       }
 
       function futuresRows(snap) {
@@ -890,7 +923,7 @@
         }
         var latest = latestSnap();
         var fut = state.tab === "FUT";
-        var rows = fut ? futuresRows(latest) : rowsFor(state.tab, latest);
+        var rows = fut ? futuresRows(latest) : attachFutures(rowsFor(state.tab, latest));
         var total = rows.reduce(function (sum, item) { return sum + item.value; }, 0);
         var daily = inRange(fut ? (state.focus ? futuresSymbolSeries(state.focus) : futuresSeries()) : (state.focus ? symbolCurves(state.focus) : series(state.tab)));
         var points = downsample(daily);
