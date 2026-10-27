@@ -179,7 +179,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.33</div>
+  <div class="ver">v0.0.34</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -926,7 +926,7 @@
           var upl = ((state.data && state.data.positions) || []).reduce(function (sum, row) { return sum + legUpl(row); }, 0);
           var ratios = accounts.map(accountMargin).filter(function (value) { return value != null && isFinite(value); });
           var tight = ratios.length ? Math.min.apply(null, ratios) : null;
-          ranges.appendChild(el("span", upl < 0 ? "down" : upl > 0 ? "up" : "", "uPnL " + formatNum(upl, 2)));
+          ranges.appendChild(el("span", upl < 0 ? "down" : upl > 0 ? "up" : "", "uPnL " + formatNum(upl, Math.abs(upl) >= 100 ? 0 : 2)));
           ranges.appendChild(el("span", "", tight == null ? "Margin —" : "Margin " + formatNum(tight, 2)));
         } else {
           RANGES.forEach(function (id) {
@@ -1097,7 +1097,7 @@
         accounts.forEach(function (row) {
           var tr = document.createElement("tr");
           var margin = accountMargin(row);
-          [row.name || "—", formatNum(Number(row.equity || 0), 2), row.available == null ? "—" : formatNum(Number(row.available), 2), margin == null ? "—" : formatNum(margin, 2)].forEach(function (text, index) {
+          [row.name || "—", formatNum(Number(row.equity || 0), Math.abs(Number(row.equity || 0)) >= 100 ? 0 : 2), row.available == null ? "—" : formatNum(Number(row.available), Math.abs(Number(row.available)) >= 100 ? 0 : 2), margin == null ? "—" : formatNum(margin, 2)].forEach(function (text, index) {
             var cell = document.createElement("td");
             if (index) cell.className = "right";
             cell.textContent = text;
