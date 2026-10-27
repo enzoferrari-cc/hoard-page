@@ -179,7 +179,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.39</div>
+  <div class="ver">v0.0.40</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -590,6 +590,8 @@
       function mountChart(canvas, points, extra) {
         if (chart) { chart.destroy(); chart = null; }
         if (points.length < 2 || typeof Chart === "undefined") return;
+        var totals = points.map(function (point) { return point.total; }).filter(function (value) { return value != null && isFinite(value); });
+        var hasNeg = totals.some(function (value) { return value < 0; });
         var ctx = canvas.getContext("2d");
         var gradient = ctx.createLinearGradient(0, 0, 0, 220);
         gradient.addColorStop(0, "rgba(139,124,255,0.16)");
@@ -604,7 +606,7 @@
             }),
             borderColor: solid,
             backgroundColor: fill || "transparent",
-            fill: !!fill,
+            fill: fill ? (hasNeg ? { target: { value: 0 } } : true) : false,
             tension: 0.35,
             cubicInterpolationMode: "monotone",
             borderWidth: axis === "y" ? 1.75 : 1.15,
@@ -627,7 +629,8 @@
               maxTicksLimit: 4,
               font: { family: "Inter, sans-serif", size: 11 },
               callback: function (value) { return compact(Number(value)); }
-            }
+            },
+            afterDataLimits: showGrid && hasNeg ? function (scale) { scale.max = Math.max(scale.max, 0); } : undefined
           };
         }
         var datasets = [series("Value", "value", "#8b7cff", "y", gradient)];
@@ -929,8 +932,15 @@
           });
           ranges.appendChild(button);
         });
-        var pct = change(daily);
-        ranges.appendChild(el("span", pct > 0 ? "up" : pct < 0 ? "down" : "", formatPct(pct)));
+        if (fut) {
+          var complete = daily.filter(function (point) { return point.complete; });
+          var delta = complete.length >= 2 ? complete[complete.length - 1].total - complete[0].total : null;
+          var text = delta == null ? "—" : (delta > 0 ? "+" : "") + compact(delta);
+          ranges.appendChild(el("span", delta > 0 ? "up" : delta < 0 ? "down" : "", text));
+        } else {
+          var pct = change(daily);
+          ranges.appendChild(el("span", pct > 0 ? "up" : pct < 0 ? "down" : "", formatPct(pct)));
+        }
         hero.appendChild(ranges);
         if (state.tags.length) {
           var active = el("div", "active");
