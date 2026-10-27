@@ -179,7 +179,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.40</div>
+  <div class="ver">v0.0.41</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -583,6 +583,7 @@
         if (abs >= 1e6) return sign + trim((abs / 1e6).toFixed(abs >= 1e7 ? 0 : 1)) + "M";
         if (abs >= 1e3) return sign + trim((abs / 1e3).toFixed(abs >= 1e4 ? 0 : 1)) + "K";
         if (abs >= 100) return sign + abs.toFixed(0);
+        if (abs === 0) return "0";
         if (abs >= 1) return sign + trim(abs.toFixed(2));
         return sign + trim(abs.toFixed(4));
       }
