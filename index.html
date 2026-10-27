@@ -179,7 +179,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.38</div>
+  <div class="ver">v0.0.39</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -377,6 +377,55 @@
             total: valued.reduce(function (sum, item) { return sum + (item ? item.value : 0); }, 0),
             complete: valued.every(Boolean)
           };
+        }).filter(Boolean);
+      }
+
+      function snapPrice(snap, symbol, fallback) {
+        var found = ((snap && snap.prices) || {})[symbol];
+        if (typeof found === "number") return found;
+        if (found && typeof found.price === "number") return found.price;
+        return fallback == null ? null : Number(fallback);
+      }
+
+      function futuresRows(snap) {
+        return (state.data.positions || []).map(function (pos) {
+          var price = snapPrice(snap, pos.symbol, pos.mark);
+          if (price == null || !isFinite(price)) return null;
+          var qty = signedQty(pos);
+          return {
+            row: { symbol: pos.symbol, qty: qty, tags: pos.tags || [], side: pos.side },
+            ticker: pos.symbol,
+            price: price,
+            value: qty * price
+          };
+        }).filter(Boolean);
+      }
+
+      function futuresSeries() {
+        var nets = {};
+        (state.data.positions || []).forEach(function (pos) {
+          nets[pos.symbol] = (nets[pos.symbol] || 0) + signedQty(pos);
+        });
+        var symbols = Object.keys(nets);
+        return (state.data.snapshots || []).map(function (snap) {
+          if (!symbols.length) return null;
+          var priced = symbols.every(function (symbol) { return snapPrice(snap, symbol, null) != null; });
+          var total = symbols.reduce(function (sum, symbol) {
+            var price = snapPrice(snap, symbol, null);
+            return sum + (price == null ? 0 : nets[symbol] * price);
+          }, 0);
+          return { ts: snap.ts, total: total, complete: priced };
+        }).filter(Boolean);
+      }
+
+      function futuresSymbolSeries(ticker) {
+        var net = (state.data.positions || []).reduce(function (sum, pos) {
+          return pos.symbol === ticker ? sum + signedQty(pos) : sum;
+        }, 0);
+        return (state.data.snapshots || []).map(function (snap) {
+          var price = snapPrice(snap, ticker, null);
+          if (price == null) return null;
+          return { ts: snap.ts, total: net * price, value: net * price, price: price, qty: net, complete: true };
         }).filter(Boolean);
       }
 
@@ -783,7 +832,7 @@
           return row;
         }
         row.className = "child";
-        name.appendChild(el("span", "sym", (item.row.tags || []).join(" ")));
+        name.appendChild(el("span", "sym", item.row.side ? (String(item.row.side).toLowerCase() === "short" ? "Short" : "Long") : (item.row.tags || []).join(" ")));
         put(name);
         put(new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(item.row.qty).replace("-", "−"), "right" + (item.row.qty < 0 ? " neg" : ""));
         put(formatNum(item.price, item.price >= 100 ? 0 : 2), "right muted");
@@ -826,7 +875,7 @@
       function render() {
         var scrollY = window.scrollY;
         var brand = document.getElementById("brand-name");
-        if (brand) brand.textContent = state.tab === "FUT" ? "Hoard" : (state.focus || "Hoard");
+        if (brand) brand.textContent = state.focus || "Hoard";
         if (chart) { chart.destroy(); chart = null; }
         var app = document.getElementById("app");
         app.textContent = "";
@@ -837,29 +886,19 @@
         }
         var latest = latestSnap();
         var fut = state.tab === "FUT";
-        var accounts = (state.data && state.data.futures_accounts) || [];
-        var accountEquity = accounts.reduce(function (sum, row) { return sum + Number(row.equity || 0); }, 0);
-        var equityRows = (state.data.holdings || []).map(function (row) {
-          if (!isFutures(row)) return null;
-          var valued = lineValue(row, latest);
-          if (!valued) return null;
-          return { row: row, ticker: baseTicker(row.symbol), price: valued.price, value: valued.value };
-        }).filter(Boolean);
-        var rows = fut ? equityRows : rowsFor(state.tab, latest);
+        var rows = fut ? futuresRows(latest) : rowsFor(state.tab, latest);
         var total = rows.reduce(function (sum, item) { return sum + item.value; }, 0);
-        var daily = fut ? [] : inRange(state.focus ? symbolCurves(state.focus) : series(state.tab));
+        var daily = inRange(fut ? (state.focus ? futuresSymbolSeries(state.focus) : futuresSeries()) : (state.focus ? symbolCurves(state.focus) : series(state.tab)));
         var points = downsample(daily);
-        var shown = fut && accounts.length ? accountEquity : total;
+        var shown = total;
         var shownText = "—";
-        if (!fut && state.focus) {
+        if (state.focus) {
           var lastPoint = null;
           daily.forEach(function (point) { if (point.complete) lastPoint = point; });
           if (lastPoint) {
             shown = lastPoint.total;
             shownText = formatNum(shown, Math.abs(shown) >= 100 || shown === 0 ? 0 : 2);
           }
-        } else if (fut && accounts.length) {
-          shownText = formatNum(accountEquity, Math.abs(accountEquity) >= 100 || accountEquity === 0 ? 0 : 2);
         } else if (rows.length) {
           shownText = formatNum(total, Math.abs(total) >= 100 || total === 0 ? 0 : 2);
         }
@@ -881,25 +920,17 @@
         line.appendChild(ccys);
         hero.appendChild(line);
         var ranges = el("div", "ranges");
-        if (fut) {
-          var upl = ((state.data && state.data.positions) || []).reduce(function (sum, row) { return sum + legUpl(row); }, 0);
-          var ratios = accounts.map(accountMargin).filter(function (value) { return value != null && isFinite(value); });
-          var tight = ratios.length ? Math.min.apply(null, ratios) : null;
-          ranges.appendChild(el("span", upl < 0 ? "down" : upl > 0 ? "up" : "", "uPnL " + formatNum(upl, Math.abs(upl) >= 100 ? 0 : 2)));
-          ranges.appendChild(el("span", "", tight == null ? "Margin —" : "Margin " + formatNum(tight, 2)));
-        } else {
-          RANGES.forEach(function (id) {
-            var button = el("button", "range" + (state.range === id ? " on" : ""), id);
-            button.type = "button";
-            button.addEventListener("click", function () {
-              state.range = id;
-              render();
-            });
-            ranges.appendChild(button);
+        RANGES.forEach(function (id) {
+          var button = el("button", "range" + (state.range === id ? " on" : ""), id);
+          button.type = "button";
+          button.addEventListener("click", function () {
+            state.range = id;
+            render();
           });
-          var pct = change(daily);
-          ranges.appendChild(el("span", pct > 0 ? "up" : pct < 0 ? "down" : "", formatPct(pct)));
-        }
+          ranges.appendChild(button);
+        });
+        var pct = change(daily);
+        ranges.appendChild(el("span", pct > 0 ? "up" : pct < 0 ? "down" : "", formatPct(pct)));
         hero.appendChild(ranges);
         if (state.tags.length) {
           var active = el("div", "active");
@@ -916,13 +947,6 @@
           hero.appendChild(active);
         }
         app.appendChild(hero);
-        if (fut) {
-          if (accounts.length) renderAccounts(app, accounts);
-          else if (equityRows.length) renderEquity(app, equityRows);
-          renderFutures(app);
-          window.scrollTo(0, scrollY);
-          return;
-        }
         var chartBox = el("section", "chart");
         var canvas = document.createElement("canvas");
         canvas.setAttribute("role", "img");
