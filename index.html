@@ -103,7 +103,8 @@
       color: #8a8f98;
       font-size: 10px;
     }
-    .sym { color: #eef0f3; font-family: ui-sans-serif, system-ui, sans-serif; }
+    .sym { color: #eef0f3; font-family: ui-sans-serif, system-ui, sans-serif; display: block; }
+    .code { color: #8a8f98; font: 10px/1.3 ui-monospace, Menlo, Consolas, monospace; }
     .tags { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
     .tag {
       border: 1px solid #2a2d33;
@@ -134,7 +135,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.6</div>
+  <div class="ver">v0.0.7</div>
   <script>
     (function () {
       var TABS = [
@@ -201,7 +202,7 @@
         if (fixed) return fixed;
         if (typeof row.price === "number") return { price: row.price, ccy: currencyOf(row) };
         var book = (snap && snap.prices) || {};
-        var found = book[row.symbol] || book[row.id];
+        var found = book[row.symbol] || book[baseTicker(row.symbol)] || book[row.id];
         if (typeof found === "number") return { price: found, ccy: currencyOf(row) };
         if (found && typeof found.price === "number") return found;
         return null;
@@ -212,6 +213,7 @@
       }
 
       function displayName(row) {
+        if (row.name) return row.name;
         var ticker = baseTicker(row.symbol);
         return NAMES[ticker] || NAMES[row.symbol] || ticker;
       }
@@ -226,18 +228,25 @@
       }
 
       function iconFor(row) {
+        var ticker = baseTicker(row.symbol);
         var paths = {
-          ETH: '<path d="M16 4l8 12-8 4-8-4z" fill="#8b7cff"/><path d="M16 28l8-12-8 4-8-4z" fill="#5b4ed1"/>',
-          BTC: '<circle cx="16" cy="16" r="10" fill="none" stroke="#f0b429" stroke-width="2"/><path d="M13 10h5.2a2.6 2.6 0 010 5.2H13zm0 5.2h6a2.6 2.6 0 010 5.2H13z" fill="#f0b429"/>',
-          USDC: '<circle cx="16" cy="16" r="10" fill="none" stroke="#5aa9ff" stroke-width="2"/>',
-          USDT: '<circle cx="16" cy="16" r="10" fill="none" stroke="#3ecfb2" stroke-width="2"/>',
-          HK: '<rect x="7" y="7" width="18" height="18" rx="4" fill="none" stroke="#ff7a90" stroke-width="2"/><path d="M11 20V12h3.2a2.4 2.4 0 010 4.8H11" fill="none" stroke="#ff7a90" stroke-width="1.6"/>',
-          A: '<rect x="7" y="7" width="18" height="18" rx="4" fill="none" stroke="#f08a5d" stroke-width="2"/><path d="M16 11l5 10h-2.2l-.9-2H14l-.9 2H11z" fill="#f08a5d"/>',
-          generic: '<circle cx="16" cy="16" r="7" fill="#8b7cff"/>'
+          ETH: '<path d="M16 5l7 11-7 4-7-4z" fill="#8b7cff"/><path d="M16 27l7-11-7 4-7-4z" fill="#5b4ed1"/>',
+          BTC: '<circle cx="16" cy="16" r="11" fill="#f0b429"/><path d="M14 9h4.5a2.4 2.4 0 010 4.8H14V9zm0 6.2h5.2a2.4 2.4 0 010 4.8H14v-4.8z" fill="#1c1915"/>',
+          USDC: '<circle cx="16" cy="16" r="11" fill="#5aa9ff"/><circle cx="16" cy="16" r="5" fill="#0e0f11"/>',
+          USDT: '<circle cx="16" cy="16" r="11" fill="#3ecfb2"/><path d="M10 13h12M16 10v12" stroke="#0e0f11" stroke-width="2"/>',
+          "0700.HK": '<rect x="6" y="6" width="20" height="20" rx="6" fill="#ff7a90"/><circle cx="16" cy="16" r="5" fill="#0e0f11"/>',
+          "9988.HK": '<rect x="6" y="6" width="20" height="20" rx="6" fill="#f08a5d"/><path d="M11 21l5-10 5 10" fill="none" stroke="#0e0f11" stroke-width="2"/>',
+          "510300": '<rect x="6" y="6" width="20" height="20" rx="6" fill="#5aa9ff"/><path d="M10 20l4-8 3 5 5-7" fill="none" stroke="#0e0f11" stroke-width="2"/>',
+          "513050": '<rect x="6" y="6" width="20" height="20" rx="6" fill="#c084fc"/><circle cx="16" cy="16" r="4" fill="#0e0f11"/>',
+          "518880": '<rect x="6" y="6" width="20" height="20" rx="6" fill="#f0b429"/><circle cx="16" cy="16" r="4" fill="#0e0f11"/>'
         };
         var wrap = document.createElement("span");
         wrap.className = "av";
-        wrap.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true">' + paths[iconKey(row)] + "</svg>";
+        if (paths[ticker]) {
+          wrap.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true">' + paths[ticker] + "</svg>";
+          return wrap;
+        }
+        wrap.textContent = markFor(row);
         return wrap;
       }
 
@@ -522,7 +531,7 @@
         var sheet = el("div", "sheet");
         var head = el("div", "head");
         head.appendChild(el("span", ""));
-        [["name", "名称", "left"], ["qty", "数量", ""], ["price", "现价", ""], ["value", "市值", ""], ["share", "占比", ""], ["tag", "标签", ""]].forEach(function (col) {
+        [["name", "标的", "left"], ["qty", "数量", ""], ["price", "价格", ""], ["value", "市值", ""], ["share", "占比", ""], ["tag", "tags", ""]].forEach(function (col) {
           var button = el("button", (col[2] ? col[2] + " " : "") + (state.sort === col[0] ? "on" : ""), col[1] + (state.sort === col[0] ? (state.dir < 0 ? " ↓" : " ↑") : ""));
           button.type = "button";
           button.addEventListener("click", function () {
@@ -542,7 +551,10 @@
         }).forEach(function (item) {
           var li = document.createElement("li");
           li.appendChild(iconFor(item.row));
-          li.appendChild(el("span", "sym", displayName(item.row)));
+          var name = el("span", "name");
+          name.appendChild(el("span", "sym", displayName(item.row)));
+          name.appendChild(el("span", "code", baseTicker(item.row.symbol)));
+          li.appendChild(name);
           li.appendChild(el("span", "right" + (item.row.qty < 0 ? " neg" : ""), new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(item.row.qty).replace("-", "−")));
           li.appendChild(el("span", "right muted", formatNum(item.price, item.price >= 100 ? 0 : 2)));
           li.appendChild(el("span", "right" + (item.value < 0 ? " neg" : ""), formatNum(item.value, Math.abs(item.value) >= 100 ? 0 : 2)));
