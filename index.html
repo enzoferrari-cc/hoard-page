@@ -166,7 +166,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.22</div>
+  <div class="ver">v0.0.23</div>
   <script>
     (function () {
       var TABS = [
@@ -397,6 +397,27 @@
         return inside;
       }
 
+      function weekKey(ts) {
+        var utc = dateUtc(ts);
+        var day = new Date(utc).getUTCDay();
+        return utc - (day === 0 ? 6 : day - 1) * 86400000;
+      }
+
+      function downsample(points) {
+        if (state.range === "7d" || state.range === "30d" || points.length < 8) return points;
+        var buckets = {};
+        var order = [];
+        points.forEach(function (point) {
+          var key = weekKey(point.ts);
+          if (!buckets[key]) order.push(key);
+          if (!buckets[key] || dateUtc(point.ts) >= dateUtc(buckets[key].ts)) buckets[key] = point;
+        });
+        var sampled = order.map(function (key) { return buckets[key]; });
+        var last = points[points.length - 1];
+        if (sampled[sampled.length - 1] !== last) sampled.push(last);
+        return sampled;
+      }
+
       function change(points) {
         var complete = points.filter(function (point) { return point.complete; });
         if (complete.length < 2 || !complete[0].total) return null;
@@ -484,6 +505,9 @@
         svg.setAttribute("viewBox", "0 0 760 180");
         svg.setAttribute("role", "img");
         if (points.length < 2) return svg;
+        var defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+        defs.innerHTML = '<linearGradient id="hoard-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8b7cff" stop-opacity="0.15"/><stop offset="1" stop-color="#8b7cff" stop-opacity="0"/></linearGradient>';
+        svg.appendChild(defs);
         var min = Math.min.apply(null, points.map(function (point) { return point.total; }));
         var max = Math.max.apply(null, points.map(function (point) { return point.total; }));
         if (min === max) { min -= 1; max += 1; }
@@ -496,12 +520,20 @@
         function flush() {
           if (segment.length < 2) { segment = []; return; }
           var indexes = segment.map(function (item) { return item.i; });
+          var line = monotone(indexes.map(function (i) { return points[i].total; }), function (n) { return x(indexes[n]); }, y);
+          var fill = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          fill.setAttribute("d", line + " L" + x(indexes[indexes.length - 1]).toFixed(1) + " 168 L" + x(indexes[0]).toFixed(1) + " 168 Z");
+          fill.setAttribute("fill", "url(#hoard-fill)");
+          fill.setAttribute("stroke", "none");
+          svg.appendChild(fill);
           var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-          path.setAttribute("d", monotone(indexes.map(function (i) { return points[i].total; }), function (n) { return x(indexes[n]); }, y));
+          path.setAttribute("d", line);
           path.setAttribute("fill", "none");
           path.setAttribute("stroke", "#8b7cff");
-          path.setAttribute("stroke-width", "2");
-          if (segment[0].backfill) path.setAttribute("stroke-dasharray", "5 4");
+          path.setAttribute("stroke-width", "1.75");
+          path.setAttribute("stroke-linecap", "round");
+          path.setAttribute("stroke-linejoin", "round");
+          if (segment[0].backfill) path.setAttribute("stroke-opacity", "0.5");
           svg.appendChild(path);
           segment = [];
         }
@@ -671,7 +703,8 @@
         var latest = latestSnap();
         var rows = rowsFor(state.tab, latest);
         var total = rows.reduce(function (sum, item) { return sum + item.value; }, 0);
-        var points = inRange(series(state.tab));
+        var daily = inRange(series(state.tab));
+        var points = downsample(daily);
         var hero = el("section", "hero");
         var line = el("div", "total-line");
         line.appendChild(el("p", "total" + (total < 0 ? " neg" : ""), rows.length ? formatNum(total, Math.abs(total) >= 100 || total === 0 ? 0 : 2) : "—"));
@@ -699,7 +732,7 @@
           });
           ranges.appendChild(button);
         });
-        var pct = change(points);
+        var pct = change(daily);
         ranges.appendChild(el("span", pct > 0 ? "up" : pct < 0 ? "down" : "", formatPct(pct)));
         hero.appendChild(ranges);
         if (state.tags.length) {
