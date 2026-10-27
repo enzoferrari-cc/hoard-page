@@ -143,7 +143,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.11</div>
+  <div class="ver">v0.0.12</div>
   <script>
     (function () {
       var TABS = [
@@ -154,6 +154,13 @@
       var state = { data: null, tab: "CNY", tags: [], sort: "value", dir: -1 };
       function palette(index) {
         return "hsl(" + Math.round((index * 137.508) % 360) + " 68% 64%)";
+      }
+
+      function tagColor(tag) {
+        var hash = 0;
+        var text = String(tag);
+        for (var i = 0; i < text.length; i += 1) hash = (hash * 33 + text.charCodeAt(i)) >>> 0;
+        return "hsl(" + (hash % 360) + " 70% 64%)";
       }
 
       function decodePortfolio() {
@@ -531,9 +538,10 @@
           var on = state.tags.indexOf(tag) >= 0;
           var button = el("button", "chip" + (on ? " on" : ""), tag);
           button.type = "button";
-          button.style.borderColor = palette(index + 3);
+          button.style.borderColor = tagColor(tag);
+          button.style.color = tagColor(tag);
           if (on) {
-            button.style.background = palette(index + 3);
+            button.style.background = tagColor(tag);
             button.style.color = "#0e0f11";
           }
           button.addEventListener("click", function () {
@@ -630,7 +638,12 @@
           var share = total ? item.value / total : null;
           li.appendChild(el("span", "right muted", share == null ? "—" : (share * 100).toFixed(0) + "%"));
           var tags = el("span", "tags");
-          (item.row.tags || []).forEach(function (tag) { tags.appendChild(el("span", "tag", tag)); });
+          (item.row.tags || []).forEach(function (tag) {
+            var chip = el("span", "tag", tag);
+            chip.style.borderColor = tagColor(tag);
+            chip.style.color = tagColor(tag);
+            tags.appendChild(chip);
+          });
           li.appendChild(tags);
           list.appendChild(li);
         });
