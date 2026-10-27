@@ -179,7 +179,7 @@
     </header>
     <div id="app"></div>
   </main>
-  <div class="ver">v0.0.34</div>
+  <div class="ver">v0.0.35</div>
   <script>
 /**
  * Skipped minification because the original files appears to be already minified.
@@ -403,14 +403,13 @@
           if (row.qty == null || row.count === "exposure" || isFutures(row) || !tagMatch(row)) return false;
           return anchorOf(currencyOf(row, quoteFor(row, null))) === tab;
         });
-        return (state.data.snapshots || []).map(function (snap) {
+        return (state.data.snapshots || []).filter(function (snap) { return snap.source !== "backfill"; }).map(function (snap) {
           if (!expected.length) return null;
           var valued = expected.map(function (row) { return lineValue(row, snap); });
           return {
             ts: snap.ts,
             total: valued.reduce(function (sum, item) { return sum + (item ? item.value : 0); }, 0),
-            complete: valued.every(Boolean),
-            backfill: snap.source === "backfill"
+            complete: valued.every(Boolean)
           };
         }).filter(Boolean);
       }
@@ -549,7 +548,7 @@
       }
 
       function symbolCurves(ticker) {
-        return (state.data.snapshots || []).map(function (snap) {
+        return (state.data.snapshots || []).filter(function (snap) { return snap.source !== "backfill"; }).map(function (snap) {
           var items = rowsFor(state.tab, snap).filter(function (item) { return item.ticker === ticker; });
           var bookQty = snap.qty || {};
           var qty = bookQty[ticker] != null ? Number(bookQty[ticker]) : (items.length ? items.reduce(function (sum, item) { return sum + Number(item.row.qty); }, 0) : null);
@@ -557,7 +556,7 @@
           var price = typeof found === "number" ? found : (found && typeof found.price === "number" ? found.price : (items[0] ? items[0].price : null));
           var value = qty != null && price != null ? qty * price : (items.length ? items.reduce(function (sum, item) { return sum + item.value; }, 0) : null);
           if ((value == null || !isFinite(value)) && (price == null || !isFinite(price)) && (qty == null || !isFinite(qty))) return null;
-          return { ts: snap.ts, total: value, value: value, price: price, qty: qty, complete: value != null && isFinite(value), backfill: snap.source === "backfill" };
+          return { ts: snap.ts, total: value, value: value, price: price, qty: qty, complete: value != null && isFinite(value) };
         }).filter(Boolean);
       }
 
@@ -580,12 +579,7 @@
         var gradient = ctx.createLinearGradient(0, 0, 0, 220);
         gradient.addColorStop(0, "rgba(139,124,255,0.16)");
         gradient.addColorStop(1, "rgba(139,124,255,0)");
-        function faded(item, solid, pale) {
-          var left = points[item.p0DataIndex];
-          var right = points[item.p1DataIndex];
-          return (left && left.backfill) || (right && right.backfill) ? pale : solid;
-        }
-        function series(label, key, solid, pale, axis, fill) {
+        function series(label, key, solid, axis, fill) {
           return {
             label: label,
             yAxisID: axis,
@@ -604,8 +598,7 @@
             pointRadius: 0,
             pointHoverRadius: 3,
             pointHoverBackgroundColor: "#eef0f3",
-            spanGaps: false,
-            segment: { borderColor: function (item) { return faded(item, solid, pale); } }
+            spanGaps: false
           };
         }
         function yAxis(position, color, title, showGrid) {
@@ -622,14 +615,14 @@
             }
           };
         }
-        var datasets = [series("Value", "value", "#8b7cff", "rgba(139,124,255,0.45)", "y", gradient)];
+        var datasets = [series("Value", "value", "#8b7cff", "y", gradient)];
         var scales = {
           x: { display: false, grid: { display: false } },
           y: yAxis("right", "#8a8f98", "", true)
         };
         if (extra) {
-          datasets.push(series("Price", "price", "#7eb6ff", "rgba(126,182,255,0.45)", "yPrice"));
-          datasets.push(series("Qty", "qty", "#e0b07a", "rgba(224,176,122,0.45)", "yQty"));
+          datasets.push(series("Price", "price", "#7eb6ff", "yPrice"));
+          datasets.push(series("Qty", "qty", "#e0b07a", "yQty"));
           scales.yPrice = yAxis("left", "#7eb6ff", "", false);
           scales.yPrice.ticks.mirror = true;
           scales.yPrice.ticks.padding = 6;
